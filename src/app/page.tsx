@@ -80,7 +80,7 @@ export default function LandingSaaS() {
       <Hero config={config} />
       <Clases disciplinas={disciplinas} />
       <Galeria galeria={galeria} />
-      <SobreMi config={config} />
+      <SobreMi />
       <Eventos eventos={eventos} whatsapp={whatsapp} />
       <Spotify spotify={config.spotify} />
       <Footer nombreEstudio={config.nombreEstudio} whatsapp={whatsapp} />
