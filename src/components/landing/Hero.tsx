@@ -80,9 +80,9 @@ export default function Hero({ config }: HeroProps) {
             <div className="relative w-32 h-32 flex items-center justify-center animate-spin-slow">
               <svg viewBox="0 0 100 100" className="w-full h-full">
                 <path id="circlePath" d="M 50, 50 m -37, 0 a 37,37 0 1,1 74,0 a 37,37 0 1,1 -74,0" fill="none" />
-                <text className="text-[10px] font-black uppercase tracking-[0.15em] fill-slate-900">
+                <text className="text-[11px] font-black uppercase tracking-[0.05em] fill-slate-900">
                   <textPath xlinkHref="#circlePath">
-                    • {config.nombreEstudio} • {config.nombreEstudio}
+                    • {config.nombreEstudio} • GESTIÓN Y RESERVAS 
                   </textPath>
                 </text>
               </svg>

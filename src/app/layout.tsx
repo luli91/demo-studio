@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   title: "Studio Manager Pro | Software de Gestión",
   description: "Sistema integral de gestión para tu estudio, academia o gimnasio.",
   icons: {
-    icon: "/logo-generic.png", 
+    icon: "/logo-sync.png", 
   },
   openGraph: {
     title: "Studio Manager Pro",

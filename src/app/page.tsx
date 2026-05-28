@@ -12,6 +12,7 @@ import SobreMi from "@/components/landing/SobreMi"
 import Eventos from "@/components/landing/Eventos"
 import Spotify from "@/components/landing/Spotify"
 import Footer from "@/components/landing/Footer"
+import Contacto from "@/components/landing/Contacto"
 
 export default function LandingSaaS() {
   const supabase = createClient()
@@ -83,6 +84,7 @@ export default function LandingSaaS() {
       <SobreMi />
       <Eventos eventos={eventos} whatsapp={whatsapp} />
       <Spotify spotify={config.spotify} />
+      <Contacto whatsapp={whatsapp} />
       <Footer nombreEstudio={config.nombreEstudio} whatsapp={whatsapp} />
     </div>
   )
