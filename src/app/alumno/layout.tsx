@@ -32,8 +32,8 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
   const supabase = createClient()
   const [menuAbierto, setMenuAbierto] = useState(false)
 
-  // ⚠️ SIMULADOR DE NEGOCIO (Cambiar a "reservas" o "mensual" para probar el menú)
-  const modeloNegocio: "reservas" | "mensual" = "mensual"
+ // ⚠️ SIMULADOR DE NEGOCIO (Usamos string genérico para que TS no moleste)
+  const modeloNegocio: string = "reservas";
 
   // Filtramos el menú: si es "mensual", sacamos las opciones que requieren reservas
   const menuFiltrado = TODAS_LAS_OPCIONES.filter(item => {
