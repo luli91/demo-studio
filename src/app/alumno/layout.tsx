@@ -19,9 +19,12 @@ import { createClient } from "@/lib/supabase"
 // Dejamos de usar una constante fija y pasamos a definir todas las opciones posibles
 const TODAS_LAS_OPCIONES = [
   { titulo: "Panel Principal", icono: LayoutDashboard, href: "/alumno", requiereReservas: false },
-  { titulo: "Inscripción", icono: CalendarDays, href: "/alumno/reservas", requiereReservas: true }, // Solo para Packs/Pole
+  { titulo: "Inscripción", icono: CalendarDays, href: "/alumno/reservas", requiereReservas: true }, 
   { titulo: "Billetera", icono: CreditCard, href: "/alumno/billetera", requiereReservas: false },
-  { titulo: "Tienda", icono: ShoppingBag, href: "/alumno/tienda", requiereReservas: false },
+  
+  // 👇 CAMBIAMOS ESTA LÍNEA A TRUE para que desaparezca en los clubes mensuales
+  { titulo: "Tienda", icono: ShoppingBag, href: "/alumno/tienda", requiereReservas: true }, 
+  
   { titulo: "Eventos", icono: Ticket, href: "/alumno/eventos", requiereReservas: false },
   { titulo: "Mi Perfil", icono: User, href: "/alumno/perfil", requiereReservas: false },
 ]
