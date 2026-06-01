@@ -65,7 +65,8 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/completar-perfil` 
+        // Redirige al callback, y le dice que después lo mande a completar perfil
+        redirectTo: `${window.location.origin}/auth/callback?next=/completar-perfil` 
       }
     });
 
