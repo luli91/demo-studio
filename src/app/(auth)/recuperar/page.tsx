@@ -36,7 +36,7 @@ export default function RecuperarClavePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 p-4 dark:bg-background">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 dark:bg-background">
       <Card className="w-full max-w-md shadow-lg border-border">
         <CardHeader className="space-y-2 text-center pb-6">
           <CardTitle className="text-3xl font-bold tracking-tight text-foreground">

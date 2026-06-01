@@ -196,7 +196,7 @@ export default function RegistroPage() {
       </div>
 
       {/* Columna Derecha: Imagen Premium */}
-      <div className="hidden lg:block lg:w-1/2 relative bg-zinc-900">
+      <div className="hidden lg:block lg:w-1/2 relative bg-primary">
         {/* Imagen de fondo desde Unsplash */}
         <img 
           src="/register.jpg" 

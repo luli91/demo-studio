@@ -25,11 +25,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  
+  const colorDinamico = "346 87% 60%"; 
+
   return (
     <html lang="es" suppressHydrationWarning>
       <body className={inter.className}>
-        {children}
-        <Toaster position="top-center" richColors />
+        {/* Bajamos el style a este div para que Next.js no lo borre */}
+        <div style={{ "--primary": colorDinamico } as React.CSSProperties} className="contents">
+          {children}
+          <Toaster position="top-center" richColors />
+        </div>
       </body>
     </html>
   );
