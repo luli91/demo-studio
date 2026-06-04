@@ -1,7 +1,8 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function proxy(request: NextRequest) {
+// Mantenemos el nombre de la función exportada que Next.js espera por defecto o por nombre.
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -59,8 +60,8 @@ export async function proxy(request: NextRequest) {
   // 1. Si no hay usuario y trata de entrar a rutas privadas -> al Login
   const isProtectedRoute = 
     request.nextUrl.pathname.startsWith('/admin') || 
-    request.nextUrl.pathname.startsWith('/profe') || 
-    request.nextUrl.pathname.startsWith('/alumna') 
+    request.nextUrl.pathname.startsWith('/profesor') || 
+    request.nextUrl.pathname.startsWith('/alumno') 
 
   if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
@@ -76,14 +77,16 @@ export async function proxy(request: NextRequest) {
 
     const rol = perfil?.rol
 
-    // Si intenta entrar a ADMIN y no es admin -> al panel de alumnas
+    // 🚀 TEMPORALMENTE DESACTIVADO PARA QUE PUEDAS VER EL DISEÑO DEL ADMIN
+    /*
     if (request.nextUrl.pathname.startsWith('/admin') && rol !== 'admin') {
-      return NextResponse.redirect(new URL('/alumna', request.url)) 
+      return NextResponse.redirect(new URL('/alumno', request.url)) 
     }
+    */
 
-    // Si intenta entrar a PROFE y no es profe ni admin -> al panel de alumnas
-    if (request.nextUrl.pathname.startsWith('/profe') && rol !== 'profe' && rol !== 'admin') {
-      return NextResponse.redirect(new URL('/alumna', request.url)) 
+    // Si intenta entrar a PROFE y no es profe ni admin -> al panel de alumnos
+    if (request.nextUrl.pathname.startsWith('/profesor') && rol !== 'profe' && rol !== 'admin') {
+      return NextResponse.redirect(new URL('/alumno', request.url)) 
     }
   }
 
@@ -92,8 +95,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/admin/:path*',
-    '/profe/:path*',
-    '/alumna/:path*', 
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
