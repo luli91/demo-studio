@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase"
 
 const OPCIONES_PROFE = [
   { titulo: "Mi Grilla", icono: CalendarCheck, href: "/profesor" },
-  { titulo: "Mis Honorarios", icono: DollarSign, href: "/profesor/honorarios" },
+  { titulo: "Mi actividad", icono: DollarSign, href: "/profesor/actividad" },
   { titulo: "Mi Perfil", icono: User, href: "/profesor/perfil" },
 ]
 

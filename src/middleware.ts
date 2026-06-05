@@ -1,8 +1,17 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Mantenemos el nombre de la función exportada que Next.js espera por defecto o por nombre.
+// 🚀 INTERRUPTOR MODO DISEÑO: 
+// Ponelo en 'true' para diseñar libremente. 
+// Ponelo en 'false' cuando conectemos Supabase para activar la seguridad real.
+const MODO_DISENO = true;
+
 export async function middleware(request: NextRequest) {
+  // Si estamos diseñando, dejamos pasar todas las rutas sin chequear nada
+  if (MODO_DISENO) {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -76,13 +85,6 @@ export async function middleware(request: NextRequest) {
       .single()
 
     const rol = perfil?.rol
-
-    // 🚀 TEMPORALMENTE DESACTIVADO PARA QUE PUEDAS VER EL DISEÑO DEL ADMIN
-    /*
-    if (request.nextUrl.pathname.startsWith('/admin') && rol !== 'admin') {
-      return NextResponse.redirect(new URL('/alumno', request.url)) 
-    }
-    */
 
     // Si intenta entrar a PROFE y no es profe ni admin -> al panel de alumnos
     if (request.nextUrl.pathname.startsWith('/profesor') && rol !== 'profe' && rol !== 'admin') {
