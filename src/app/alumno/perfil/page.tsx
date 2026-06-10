@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase"
 import { toast } from "sonner"
-import { Loader2, User, Mail, Phone, ShieldCheck, Save, CreditCard, Activity } from "lucide-react"
+import { Loader2, User, Mail, Phone, ShieldCheck, Save, CreditCard, Activity, Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -12,12 +12,16 @@ export default function PerfilPage() {
   
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [perfil, setPerfil] = useState<any>(null)
   const [emailUsuario, setEmailUsuario] = useState("")
 
   // Estados del formulario
   const [nombre, setNombre] = useState("")
   const [telefono, setTelefono] = useState("")
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // --- 1. CARGAR DATOS DEL PERFIL ---
   useEffect(() => {
@@ -33,6 +37,7 @@ export default function PerfilPage() {
           setPerfil(dataPerfil)
           setNombre(dataPerfil.nombre || "")
           setTelefono(dataPerfil.telefono || "")
+          setAvatarUrl(dataPerfil.avatar_url || null)
         } else {
           // Datos de prueba si el perfil está vacío o no conecta
           setNombre("Cynthia")
@@ -45,7 +50,52 @@ export default function PerfilPage() {
     cargarPerfil()
   }, [supabase])
 
-  // --- 2. GUARDAR CAMBIOS ---
+  // --- 2. SUBIR FOTO DE PERFIL ---
+  const handleSubirFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setSubiendoFoto(true)
+      if (!e.target.files || e.target.files.length === 0) {
+        return
+      }
+
+      const file = e.target.files[0]
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("No hay sesión activa.")
+
+      // Creamos un nombre único para el archivo
+      const fileExt = file.name.split('.').pop()
+      const filePath = `${user.id}-${Math.random()}.${fileExt}`
+
+      // Subimos al Storage de Supabase (Asegurate de crear un bucket llamado 'avatars')
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      // Obtenemos la URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      // Actualizamos la tabla de perfiles
+      const { error: updateError } = await supabase
+        .from('perfiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      setAvatarUrl(publicUrl)
+      toast.success("¡Foto de perfil actualizada!")
+    } catch (error: any) {
+      toast.error(error.message || "Hubo un error al subir la imagen.")
+    } finally {
+      setSubiendoFoto(false)
+    }
+  }
+
+  // --- 3. GUARDAR CAMBIOS DE TEXTO ---
   const handleGuardarCambios = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -104,8 +154,56 @@ export default function PerfilPage() {
             </div>
             
             <CardContent className="p-6">
-              <form onSubmit={handleGuardarCambios} className="space-y-6">
+              
+              {/* Sección Foto de Perfil */}
+              <div className="flex flex-col sm:flex-row items-center gap-6 mb-8 pb-8 border-b border-border">
+                <div className="relative group">
+                  <div className="h-24 w-24 rounded-full bg-primary/10 border-4 border-background shadow-md overflow-hidden flex items-center justify-center relative">
+                    {subiendoFoto ? (
+                      <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                    ) : avatarUrl ? (
+                      <img src={avatarUrl} alt="Foto de perfil" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-3xl font-black text-primary">
+                        {nombre ? nombre.charAt(0).toUpperCase() : "U"}
+                      </span>
+                    )}
+                    
+                    {/* Overlay al hacer hover */}
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    >
+                      <Camera className="h-6 w-6 mb-1" />
+                    </div>
+                  </div>
+                </div>
                 
+                <div className="text-center sm:text-left">
+                  <h3 className="font-bold text-foreground">Foto de Perfil</h3>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Subí una imagen para que los profes y el estudio puedan identificarte mejor.
+                  </p>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    ref={fileInputRef}
+                    onChange={handleSubirFoto}
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={subiendoFoto}
+                  >
+                    {subiendoFoto ? "Subiendo..." : "Cambiar Foto"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Formulario */}
+              <form onSubmit={handleGuardarCambios} className="space-y-6">
                 {/* Campo Email (Solo lectura) */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">

@@ -66,7 +66,7 @@ export default function ActividadProfe() {
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight italic flex items-center gap-3">
-            <Wallet className="h-8 w-8 text-primary" /> Mis Honorarios
+            <Wallet className="h-8 w-8 text-primary" /> Mi Actividad
           </h1>
           <p className="text-muted-foreground mt-1 font-medium">Cronograma mensual y recibos de pago.</p>
         </div>

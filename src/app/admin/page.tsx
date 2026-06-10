@@ -48,7 +48,6 @@ export default function AdminDashboardMainPage() {
   const [barrios, setBarrios] = useState<{nombre: string, porcentaje: number}[]>([])
   const [cargando, setCargando] = useState(true)
 
-  // --- TU LÓGICA ORIGINAL DE SUPABASE (Intacta) ---
   useEffect(() => {
     const cargarDashboard = async () => {
       const ahora = new Date()
@@ -205,7 +204,7 @@ export default function AdminDashboardMainPage() {
           </Card>
         </Link>
 
-        <Link href="/admin/alumnas" className="block transition-transform hover:scale-[1.02]">
+        <Link href="/admin/alumnos" className="block transition-transform hover:scale-[1.02]">
           <Card className="border border-border shadow-sm bg-card text-foreground h-full">
             <CardContent className="p-6 flex flex-col h-full justify-between">
               <div>
