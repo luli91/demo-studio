@@ -52,7 +52,7 @@ export default function PerfilPage() {
         } else {
           setNombre("Cynthia")
           setTelefono("")
-          setPerfil({ estado_cuota: 'al_dia' })
+          setPerfil({})
           setDocumentos([
             { id: "doc-1", nombre: "Apto_Fisico_Cynthia_2026.pdf", fecha: "2026-05-14T10:30:00" }
           ])
@@ -242,7 +242,7 @@ export default function PerfilPage() {
           </CardContent>
         </Card>
 
-        {/* COLUMNA DERECHA: Legajo Digital (Alineado perfectamente al lado) */}
+        {/* COLUMNA DERECHA: Legajo Digital */}
         <Card className="border-border shadow-sm rounded-2xl overflow-hidden bg-card">
           <div className="bg-secondary/30 border-b border-border px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
