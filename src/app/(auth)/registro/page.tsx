@@ -48,43 +48,22 @@ export default function RegistroPage() {
     setCargando(true)
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const nombreArmado = `${nombre} ${apellido}`.trim()
+
+      // Delegamos TODO a Auth. El Trigger de SQL intercepta esto y lo guarda en 'usuarios'
+      const { error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: nombreArmado,
+            // Pasamos metadata extra por si la chica no estaba en la Sala de Espera
+            telefono: telefono 
+          }
+        }
       })
 
       if (authError) throw new Error(authError.message)
-      if (!authData.user) throw new Error("No se pudo crear el usuario en Auth")
-
-      const nombreArmado = `${nombre} ${apellido}`.trim()
-      const direccionArmada = `${calle} ${numeroCalle}, ${barrioLocalidad}, ${provincia}`
-
-      // Empaquetamos todo lo que NO tiene columna propia en el JSONB
-      const datosFlexiblesPayload = {
-        calle: calle,
-        numero_calle: numeroCalle,
-        provincia: provincia,
-        barrio_localidad: barrioLocalidad,
-        direccion_completa: direccionArmada,
-        contacto_urgencia: contactoUrgencia
-      }
-
-      // Insertamos en la tabla maestra SaaS
-      const { error: usuarioError } = await supabase
-        .from("usuarios")
-        .insert([
-          {
-            id: authData.user.id,
-            email: email,
-            nombre: nombreArmado,
-            telefono: telefono,
-            rol: "alumno", 
-            // academia_id: "Acá iría el ID del estudio o club que extraemos de la URL o el contexto",
-            datos_flexibles: datosFlexiblesPayload
-          }
-        ])
-
-      if (usuarioError) throw new Error("Error al guardar la ficha en el sistema")
 
       toast.success("¡Cuenta creada con éxito!")
       router.push("/alumno")
@@ -98,7 +77,6 @@ export default function RegistroPage() {
 
   return (
     <div className="flex min-h-screen w-full bg-background">
-      {/* Columna Izquierda: Formulario Scrolleable */}
       <div className="flex w-full flex-col items-center justify-center p-8 lg:w-1/2 overflow-y-auto">
         <div className="w-full max-w-md space-y-8 my-8">
           <div className="text-center">
@@ -195,17 +173,13 @@ export default function RegistroPage() {
         </div>
       </div>
 
-      {/* Columna Derecha: Imagen Premium */}
       <div className="hidden lg:block lg:w-1/2 relative bg-primary">
-        {/* Imagen de fondo desde Unsplash */}
         <img 
           src="/register.jpg" 
           alt="Fondo de entrenamiento" 
           className="absolute inset-0 h-full w-full object-cover opacity-50"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
-        
-        {/* Texto por encima de la imagen */}
         <div className="absolute inset-0 flex items-center justify-center p-12 text-white z-20">
           <div className="max-w-md">
             <h2 className="text-4xl font-bold mb-4">Gestioná tu disciplina sin esfuerzo.</h2>
