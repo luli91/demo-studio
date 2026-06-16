@@ -65,8 +65,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // Redirige al callback, y le dice que después lo mande a completar perfil
-        redirectTo: `${window.location.origin}/auth/callback?next=/completar-perfil` 
+        redirectTo: `${window.location.origin}/auth/callback` 
       }
     });
 
@@ -159,7 +158,6 @@ export default function LoginPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
         
-        {/* Texto por encima de la imagen */}
         <div className="absolute inset-0 flex items-center justify-center p-12 text-white z-20">
           <div className="max-w-md">
             <h2 className="text-4xl font-bold mb-4">Gestioná tu disciplina sin esfuerzo.</h2>
