@@ -45,10 +45,10 @@ export default function LandingSaaS() {
       const hoy = new Date().toISOString().split('T')[0]
       
       const [resEv, resGal, resDisc, resConf] = await Promise.all([
-        supabase.from("clases").select("*").eq("es_evento", true).gte("fecha", hoy).order("fecha", { ascending: true }),
+        supabase.from("landing_clases").select("*").eq("es_evento", true).gte("fecha", hoy).order("fecha", { ascending: true }),
         supabase.from("landing_multimedia").select("*").order("orden"),
         supabase.from("landing_disciplinas").select("*").order("orden"),
-        supabase.from("configuracion").select("*")
+        supabase.from("landing_configuracion").select("*")
       ])
 
       if (resEv.data) setEventos(resEv.data)
