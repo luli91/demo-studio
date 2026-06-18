@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase"
 import { toast } from "sonner"
 import { 
   Loader2, Users, User, HeartPulse, FileText, UploadCloud, 
-  Download, Trash2, MapPin, Phone, Calendar
+  Download, Trash2, MapPin, Phone, Calendar, Camera
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,22 +16,62 @@ export default function FamiliaPage() {
   const [cargando, setCargando] = useState(true)
   const [hijos, setHijos] = useState<any[]>([])
   
+  // Estado para controlar qué pestaña (hijo) está seleccionada
+  const [hijoActivoId, setHijoActivoId] = useState<string | null>(null)
+
   const [guardandoHijo, setGuardandoHijo] = useState<string | null>(null)
   const [subiendoDocHijo, setSubiendoDocHijo] = useState<string | null>(null)
+  const [subiendoFotoHijo, setSubiendoFotoHijo] = useState<string | null>(null)
   const [borrandoDoc, setBorrandoDoc] = useState<string | null>(null)
 
   useEffect(() => {
     const cargarFamilia = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        // Traemos todas las fichas vinculadas a este adulto
         const { data: dataHijos } = await supabase.from("usuarios").select("*").eq("titular_id", user.id)
-        if (dataHijos) setHijos(dataHijos)
+        if (dataHijos && dataHijos.length > 0) {
+          setHijos(dataHijos)
+          // Seleccionamos al primer hijo por defecto
+          setHijoActivoId(dataHijos[0].id)
+        }
       }
       setCargando(false)
     }
     cargarFamilia()
   }, [supabase])
+
+  // --- SUBIR FOTO DE PERFIL DEL MENOR ---
+  const handleSubirFotoHijo = async (e: React.ChangeEvent<HTMLInputElement>, hijoId: string, index: number) => {
+    try {
+      setSubiendoFotoHijo(hijoId)
+      if (!e.target.files || e.target.files.length === 0) return
+
+      const file = e.target.files[0]
+      const fileExt = file.name.split('.').pop()
+      const filePath = `${hijoId}/avatar-${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true })
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath)
+
+      const hijo = hijos[index]
+      const flexActual = hijo.datos_flexibles || {}
+      const nuevosFlex = { ...flexActual, avatar_url: publicUrl }
+
+      await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', hijoId)
+
+      const nuevosHijos = [...hijos]
+      nuevosHijos[index].datos_flexibles = nuevosFlex
+      setHijos(nuevosHijos)
+
+      toast.success(`Foto de perfil de ${hijo.nombre.split(' ')[0]} actualizada.`)
+    } catch (error: any) {
+      toast.error("Hubo un error al subir la imagen.")
+    } finally {
+      setSubiendoFotoHijo(null)
+    }
+  }
 
   // --- GUARDAR CAMBIOS DE LA FICHA DEL HIJO ---
   const handleGuardarHijo = async (hijoId: string, index: number) => {
@@ -39,7 +79,6 @@ export default function FamiliaPage() {
     try {
       const hijo = hijos[index]
       
-      // Armamos la dirección completa del menor para que el admin la vea fácil
       const flex = hijo.datos_flexibles || {}
       const direccionArmada = `${flex.calle || ""} ${flex.numero_calle || ""}, ${flex.barrio_localidad || ""}, ${flex.provincia || ""}`
       
@@ -48,7 +87,6 @@ export default function FamiliaPage() {
         direccion_completa: direccionArmada.trim()
       }
 
-      // Sincronizamos con la base de datos real
       const { error } = await supabase
         .from('usuarios')
         .update({ 
@@ -150,21 +188,68 @@ export default function FamiliaPage() {
           <p className="text-muted-foreground text-sm mt-1">Si necesitás vincular la cuenta de un menor para abonar su cuota o subir su apto físico, solicitalo en la administración.</p>
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
+          
+          {/* NAVEGACIÓN DE PESTAÑAS */}
+          <div className="flex gap-2 border-b border-border overflow-x-auto pb-px scrollbar-hide">
+            {hijos.map((hijo) => (
+              <button 
+                key={hijo.id}
+                onClick={() => setHijoActivoId(hijo.id)}
+                className={`shrink-0 px-6 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${
+                  hijoActivoId === hijo.id 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'text-muted-foreground hover:bg-secondary'
+                }`}
+              >
+                <User className="h-4 w-4" />
+                {hijo.nombre.split(' ')[0]} {/* Muestra solo el primer nombre */}
+              </button>
+            ))}
+          </div>
+
+          {/* CONTENIDO DE LA FICHA SELECCIONADA */}
           {hijos.map((hijo, index) => {
+            if (hijo.id !== hijoActivoId) return null; // Solo renderizamos la ficha activa
+
             const flexHijo = hijo.datos_flexibles || {}
             const docsHijo = flexHijo.documentos || []
 
             return (
-              <Card key={hijo.id} className="border-border shadow-sm rounded-2xl overflow-hidden bg-card">
+              <Card key={hijo.id} className="border-border shadow-sm rounded-2xl overflow-hidden bg-card animate-in fade-in">
                 <div className="bg-secondary/30 border-b border-border px-6 py-4 flex items-center justify-between">
                   <h3 className="font-bold text-foreground flex items-center gap-2">
-                    <User className="h-5 w-5 text-primary"/> Ficha Médica y Deportiva: {hijo.nombre}
+                    Ficha Médica y Deportiva: {hijo.nombre}
                   </h3>
                 </div>
                 
                 <CardContent className="p-6 space-y-6">
                   
+                  {/* SECCIÓN FOTO DE PERFIL DEL MENOR */}
+                  <div className="flex flex-col sm:flex-row items-center gap-6 mb-2 pb-6 border-b border-border">
+                    <div className="relative group cursor-pointer">
+                      <div className="h-20 w-20 rounded-full bg-primary/10 border-2 border-background shadow-sm overflow-hidden flex items-center justify-center">
+                        {subiendoFotoHijo === hijo.id ? (
+                          <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                        ) : flexHijo.avatar_url ? (
+                          <img src={flexHijo.avatar_url} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-2xl font-black text-primary">{hijo.nombre.charAt(0)}</span>
+                        )}
+                      </div>
+                      <label className="absolute bottom-0 right-0 bg-secondary p-1.5 rounded-full border-2 border-background cursor-pointer hover:bg-primary hover:text-white transition-colors">
+                        <Camera className="h-3 w-3" />
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => handleSubirFotoHijo(e, hijo.id, index)} />
+                      </label>
+                    </div>
+                    <div className="text-center sm:text-left">
+                      <h4 className="font-bold text-foreground text-lg">{hijo.nombre}</h4>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 max-w-xs font-black uppercase tracking-widest">
+                        Click en la cámara para subir foto
+                      </p>
+                    </div>
+                  </div>
+
                   {/* FILA 1: DATOS BÁSICOS DEL MENOR */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
@@ -181,7 +266,6 @@ export default function FamiliaPage() {
                       />
                     </div>
 
-                    {/* NUEVO CAMPO: FECHA DE NACIMIENTO */}
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Fecha de Nacimiento</label>
                       <div className="relative">
@@ -237,7 +321,7 @@ export default function FamiliaPage() {
                     </div>
                   </div>
 
-                  {/* FILA 3: DIRECCIÓN PROPIA DEL MENOR (POR SI VIVE CON EL OTRO PADRE) */}
+                  {/* FILA 3: DIRECCIÓN PROPIA DEL MENOR */}
                   <div className="p-4 bg-secondary/20 rounded-xl border border-border space-y-4">
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />

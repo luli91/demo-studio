@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { X, Send, Loader2 } from "lucide-react"
+import { X, Send, Loader2, UserPlus, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
@@ -16,6 +16,7 @@ interface NuevoAlumnoModalProps {
 
 export default function NuevoAlumnoModal({ abierto, modeloNegocio, onClose, onGuardado }: NuevoAlumnoModalProps) {
   const [procesando, setProcesando] = useState(false)
+  const [esTutor, setEsTutor] = useState(false) // FALSE = Entrena, TRUE = Solo paga
   const supabase = createClient()
 
   if (!abierto) return null
@@ -28,17 +29,18 @@ export default function NuevoAlumnoModal({ abierto, modeloNegocio, onClose, onGu
     const emailInput = (formData.get('email') as string).toLowerCase().trim()
     const nombreCompleto = `${formData.get('nombre')} ${formData.get('apellido')}`.trim()
     
-    const creditosIniciales = modeloNegocio === 'reservas' ? parseInt(formData.get('creditos') as string) : 0
+    const creditosIniciales = modeloNegocio === 'reservas' && !esTutor ? parseInt(formData.get('creditos') as string) : 0
+    
     const datosFlexibles = {
       estado_cuota: 'al_dia',
       creditos_clases: creditosIniciales,
       contacto_urgencia: "", 
+      entrena: !esTutor, // Guardamos la decisión de Flor
       documentos: [],
       pagos: [],
       asistencias: []
     }
 
-    // Estructura exacta para nuestra nueva tabla "pre_inscripciones"
     const nuevaPreInscripcion = {
       email: emailInput,
       nombre: nombreCompleto,
@@ -47,18 +49,13 @@ export default function NuevoAlumnoModal({ abierto, modeloNegocio, onClose, onGu
     }
 
     try {
-      // 1. Verificamos que no exista ya un usuario oficial con ese email
       const { data: usuarioExistente } = await supabase.from('usuarios').select('id').eq('email', emailInput).single()
-      if (usuarioExistente) throw new Error("Ya existe una alumna registrada con este email.")
+      if (usuarioExistente) throw new Error("Ya existe una cuenta registrada con este email.")
 
-      // 2. Guardamos en la sala de espera (Upsert por si la admin corrige algo)
-      const { error } = await supabase
-        .from('pre_inscripciones')
-        .upsert([nuevaPreInscripcion])
-
+      const { error } = await supabase.from('pre_inscripciones').upsert([nuevaPreInscripcion])
       if (error) throw error
 
-      toast.success("¡Ficha creada en Sala de Espera! La alumna ya puede registrarse.")
+      toast.success(esTutor ? "¡Cuenta Tutora creada en espera!" : "¡Ficha creada en Sala de Espera!")
       onGuardado() 
       onClose()
     } catch (error: any) {
@@ -77,14 +74,32 @@ export default function NuevoAlumnoModal({ abierto, modeloNegocio, onClose, onGu
             <h3 className="font-black text-lg uppercase tracking-widest flex items-center gap-2">
               <Send className="h-5 w-5"/> Pre-Inscripción
             </h3>
-            <p className="text-xs font-medium opacity-80 mt-1">Crear ficha en Sala de Espera.</p>
+            <p className="text-xs font-medium opacity-80 mt-1">Crear ficha de acceso al sistema.</p>
           </div>
           <button type="button" onClick={onClose} className="hover:bg-black/20 p-1 rounded-full transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* TOGGLE TUTOR VS ALUMNO */}
+          <div 
+            onClick={() => setEsTutor(!esTutor)}
+            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex gap-3 items-center ${esTutor ? 'bg-secondary/20 border-primary' : 'bg-background border-border hover:border-primary/50'}`}
+          >
+            <div className={`p-2 rounded-full ${esTutor ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
+              {esTutor ? <ShieldCheck className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
+            </div>
+            <div>
+              <p className="font-black text-sm uppercase tracking-tight text-foreground">
+                {esTutor ? 'Es Cuenta Tutora (Solo paga)' : 'Es Alumno (Entrena)'}
+              </p>
+              <p className="text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
+                {esTutor ? 'Administra a sus hijos, no consume clases.' : 'Toma clases y consume créditos/cuota.'}
+              </p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre</label>
@@ -106,7 +121,7 @@ export default function NuevoAlumnoModal({ abierto, modeloNegocio, onClose, onGu
             <Input name="email" type="email" required placeholder="laura@ejemplo.com" className="h-11 rounded-xl border-primary/30 bg-primary/5 font-bold focus-visible:ring-primary" />
           </div>
 
-          {modeloNegocio === 'reservas' && (
+          {modeloNegocio === 'reservas' && !esTutor && (
             <div className="space-y-1 pt-2">
               <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Créditos a Otorgar</label>
               <Input name="creditos" type="number" defaultValue="0" min="0" className="h-11 rounded-xl font-bold" />
@@ -117,7 +132,6 @@ export default function NuevoAlumnoModal({ abierto, modeloNegocio, onClose, onGu
             {procesando ? <Loader2 className="h-5 w-5 animate-spin" /> : "Dejar ficha en espera"}
           </Button>
         </form>
-
       </div>
     </div>
   )
