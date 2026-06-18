@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Eye, EyeOff } from "lucide-react"
+import { Loader2, Eye, EyeOff, Calendar } from "lucide-react"
 import { toast } from "sonner"
 
 import { createClient } from "@/lib/supabase"
@@ -19,6 +19,7 @@ export default function RegistroPage() {
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
   const [email, setEmail] = useState("")
+  const [fechaNacimiento, setFechaNacimiento] = useState("")
   const [telefono, setTelefono] = useState("")
   const [contactoUrgencia, setContactoUrgencia] = useState("")
   
@@ -61,7 +62,8 @@ export default function RegistroPage() {
         provincia: provincia,
         barrio_localidad: barrioLocalidad,
         direccion_completa: direccionArmada,
-        contacto_urgencia: contactoUrgencia
+        contacto_urgencia: contactoUrgencia,
+        fecha_nacimiento: fechaNacimiento
       }
 
       const { error: authError } = await supabase.auth.signUp({
@@ -124,9 +126,25 @@ export default function RegistroPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fechaNacimiento">Fecha de Nac.</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+                  <Input 
+                    id="fechaNacimiento" 
+                    type="date" 
+                    required 
+                    value={fechaNacimiento} 
+                    onChange={(e) => setFechaNacimiento(e.target.value)} 
+                    className="pl-10"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
