@@ -1,8 +1,12 @@
 "use client"
 
-import { Camera, Phone, MapPin, ShieldAlert, AlertCircle, Trash2, UserX, Calendar, Loader2 } from "lucide-react"
+import { useState } from "react"
+import { Camera, Phone, MapPin, ShieldAlert, AlertCircle, Trash2, UserX, Calendar, Loader2, Tag, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { format } from "date-fns"
+import { createClient } from "@/lib/supabase"
+import { toast } from "sonner"
 
 interface TabPerfilProps {
   alumno: any
@@ -12,13 +16,78 @@ interface TabPerfilProps {
   onCambiarFoto: (e: React.ChangeEvent<HTMLInputElement>) => void
   onEliminarPre: () => void
   onArchivar: () => void
+  onRefresh: () => void // Nueva prop para avisar que se actualizaron los datos
 }
 
 export default function TabPerfil({ 
-  alumno, esTutor, direccionArmada, subiendoFoto, onCambiarFoto, onEliminarPre, onArchivar 
+  alumno, esTutor, direccionArmada, subiendoFoto, onCambiarFoto, onEliminarPre, onArchivar, onRefresh 
 }: TabPerfilProps) {
   
+  const supabase = createClient()
+  const [nuevaEtiqueta, setNuevaEtiqueta] = useState("")
+  const [guardandoTag, setGuardandoTag] = useState(false)
+
   const flex = alumno.datos_flexibles || {}
+  const etiquetas = flex.etiquetas || []
+
+  // --- AGREGAR ETIQUETA ---
+  const handleAddTag = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const tagLimpio = nuevaEtiqueta.trim().toUpperCase() // Todo a mayúsculas para estandarizar
+    
+    if (!tagLimpio) return
+    if (alumno.es_preinscripcion) return toast.error("No se pueden poner etiquetas en sala de espera.")
+    if (etiquetas.includes(tagLimpio)) return toast.error("Este alumno ya tiene esa etiqueta.")
+
+    setGuardandoTag(true)
+    try {
+      const nuevasEtiquetas = [...etiquetas, tagLimpio]
+      
+      const { error } = await supabase
+        .from('usuarios')
+        .update({
+          datos_flexibles: {
+            ...flex,
+            etiquetas: nuevasEtiquetas
+          }
+        })
+        .eq('id', alumno.id)
+
+      if (error) throw error
+
+      toast.success(`Etiqueta "${tagLimpio}" vinculada.`)
+      setNuevaEtiqueta("")
+      onRefresh() // Fuerza al orquestador general a recargar la BD
+    } catch (error: any) {
+      toast.error("Error al guardar etiqueta: " + error.message)
+    } finally {
+      setGuardandoTag(false)
+    }
+  }
+
+  // --- ELIMINAR ETIQUETA ---
+  const handleRemoveTag = async (tagAEliminar: string) => {
+    try {
+      const nuevasEtiquetas = etiquetas.filter((t: string) => t !== tagAEliminar)
+      
+      const { error } = await supabase
+        .from('usuarios')
+        .update({
+          datos_flexibles: {
+            ...flex,
+            etiquetas: nuevasEtiquetas
+          }
+        })
+        .eq('id', alumno.id)
+
+      if (error) throw error
+
+      toast.success("Etiqueta desvinculada.")
+      onRefresh()
+    } catch (error: any) {
+      toast.error("Error al eliminar etiqueta.")
+    }
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4">
@@ -63,9 +132,51 @@ export default function TabPerfil({
           <div className="flex items-center gap-3 text-sm font-medium items-start"><MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" /> {direccionArmada || "Sin dirección"}</div>
         </div>
 
+        {/* --- NUEVO MÓDULO: GESTIÓN DE CATEGORÍAS / ETIQUETAS --- */}
+        <div className="mt-6 p-5 bg-background border rounded-2xl text-left space-y-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+            <Tag className="h-4 w-4 text-primary" /> Clasificación / Etiquetas (Filtros)
+          </p>
+          
+          {/* Listado de pastillas */}
+          <div className="flex flex-wrap gap-1.5 min-h-[2rem] items-center">
+            {etiquetas.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">Sin etiquetas asignadas. Agregá categorías abajo.</p>
+            ) : (
+              etiquetas.map((tag: string) => (
+                <span 
+                  key={tag} 
+                  className="inline-flex items-center gap-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border border-primary/20 transition-all hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20 cursor-pointer group"
+                  onClick={() => handleRemoveTag(tag)}
+                  title="Hacé clic para remover"
+                >
+                  {tag}
+                  <X className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                </span>
+              ))
+            )}
+          </div>
+
+          {/* Formulario rápido para agregar */}
+          {!alumno.es_preinscripcion && (
+            <form onSubmit={handleAddTag} className="flex gap-2 pt-1">
+              <Input 
+                value={nuevaEtiqueta}
+                onChange={(e) => setNuevaEtiqueta(e.target.value)}
+                placeholder="Ej: FUTSAL INFANTIL, SALSA, CAT 2015..." 
+                className="h-9 text-xs rounded-xl bg-card"
+                disabled={guardandoTag}
+              />
+              <Button type="submit" size="sm" disabled={guardandoTag} className="h-9 px-3 rounded-xl">
+                {guardandoTag ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-4 w-4" />}
+              </Button>
+            </form>
+          )}
+        </div>
+
         <div className={`mt-6 p-4 rounded-2xl border-2 shadow-inner text-left ${flex.contacto_urgencia ? 'bg-destructive/5 border-destructive/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
           <p className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${flex.contacto_urgencia ? 'text-destructive' : 'text-amber-600'}`}>
-            {flex.contacto_urgencia ? <ShieldAlert className="h-4 w-4 animate-pulse" /> : <AlertCircle className="h-4 w-4" />} Contacto Emergencia
+            <AlertCircle className="h-4 w-4" /> Contacto Emergencia
           </p>
           <p className={`font-black text-sm uppercase mt-1 ${flex.contacto_urgencia ? 'text-foreground' : 'text-amber-700'}`}>
             {flex.contacto_urgencia || "⚠️ NO CARGADO"}

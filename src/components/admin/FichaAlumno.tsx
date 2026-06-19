@@ -144,6 +144,7 @@ export default function FichaAlumno({
             onCambiarFoto={handleSubirFotoAdmin}
             onEliminarPre={onEliminarPre}
             onArchivar={onArchivar}
+            onRefresh={onSubirArchivo} 
           />
         )}
 
