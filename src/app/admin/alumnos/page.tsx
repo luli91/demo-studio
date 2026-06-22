@@ -143,7 +143,7 @@ export default function AdminAlumnosPage() {
       toast.error("Error al cargar la base de datos: " + error.message)
     }
   }
-  
+
   useEffect(() => {
     setIsMounted(true)
     cargarAlumnos()
@@ -249,11 +249,14 @@ export default function AdminAlumnosPage() {
           modeloNegocio={modeloNegocio}
           onVolver={() => setVistaActiva('directorio')}
           onAbrirCobro={() => {
-            const familia = alumnos.filter(a => 
-              (a.titular_id === alumnoSeleccionado.id || a.titular_id === alumnoSeleccionado.titular_id || a.id === alumnoSeleccionado.titular_id) && 
-              a.id !== alumnoSeleccionado.id
-            )
-            setModalCobro({ abierto: true, familia: familia.length > 0 ? [alumnoSeleccionado, ...familia] : [alumnoSeleccionado] })
+            const familia = alumnos.filter(a => {
+              if (a.id === alumnoSeleccionado.id) return false;
+              if (!alumnoSeleccionado.titular_id) {
+                return a.titular_id === alumnoSeleccionado.id; 
+              }
+              return a.id === alumnoSeleccionado.titular_id || a.titular_id === alumnoSeleccionado.titular_id;
+            })
+            setModalCobro({ abierto: true, familia: [alumnoSeleccionado, ...familia] })
           }}
           onVerRecibo={setReciboVisualizado}
           onSubirArchivo={simularSubidaArchivo}

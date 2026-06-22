@@ -66,8 +66,8 @@ export default function MiGrillaProfe() {
           estado_profe: 'pendiente', // 'pendiente', 'presente', 'ausente'
           cupo_maximo: 15,
           reservas: [
-            { id: "res-1", estado: "confirmada", presente_local: false, perfiles: { id: "alu-1", nombre: "Martina", apellido: "Gómez", telefono: "5491133445566", contacto_urgencia: "11-2222-3333 (Papá)", estado_cuota: "al_dia" } },
-            { id: "res-2", estado: "confirmada", presente_local: true, perfiles: { id: "alu-2", nombre: "Sofía", apellido: "Rodríguez", telefono: "5491144556677", estado_cuota: "deudor" } }
+            { id: "res-1", estado: "confirmada", presente_local: false, perfiles: { id: "alu-1", nombre: "Martina", apellido: "Gómez", telefono: "5491133445566", contacto_urgencia: "11-2222-3333 (Papá)", estado_cuota: "vencida" } },
+            { id: "res-2", estado: "confirmada", presente_local: true, perfiles: { id: "alu-2", nombre: "Sofía", apellido: "Rodríguez", telefono: "5491144556677", estado_cuota: "vencida" } }
           ]
         },
         {

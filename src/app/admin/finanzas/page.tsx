@@ -2,35 +2,79 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase"
-import { Wallet, Trash2, TrendingUp, TrendingDown, Plus, Minus, Info, AlertCircle, Building2, UserMinus, X, CheckSquare, Upload, Calendar, Printer, Filter } from "lucide-react"
+import { Wallet, Trash2, TrendingUp, TrendingDown, Plus, Minus, AlertCircle, Building2, UserMinus, X, CheckSquare, Upload, Calendar, Printer, Loader2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 
-
-// ============================================================================
-// COMPONENTE PRINCIPAL (La cáscara que maneja las pestañas)
-// ============================================================================
 export default function FinanzasDashboard() {
   const supabase = createClient()
-  const modeloNegocio = "mensual" // Para ver deudores
+  const modeloNegocio = "mensual" 
   
   const [pestañaActiva, setPestañaActiva] = useState('resumen')
   const [modalNuevoMovimiento, setModalNuevoMovimiento] = useState(false)
   const [tipoMovimiento, setTipoMovimiento] = useState<'ingreso' | 'egreso'>('ingreso')
+  const [cargando, setCargando] = useState(true)
 
-  // Datos globales
-  const [movimientos, setMovimientos] = useState<any[]>([
-    { id: 1, tipo: "ingreso", fecha: new Date().toISOString(), descripcion: "Cuota - Alumna Prueba", monto: 15000, metodo: "Mercado Pago" },
-    { id: 2, tipo: "egreso", fecha: new Date().toISOString(), descripcion: "Compra Insumos", monto: 5000, metodo: "Efectivo" }
-  ])
+  // Movimientos unificados (Ingresos de Supabase + Egresos locales)
+  const [movimientos, setMovimientos] = useState<any[]>([])
 
-  // Cálculos Automáticos
+  const cargarCajaReal = async () => {
+    try {
+      setCargando(true)
+      // 1. Traemos todos los pagos registrados por secretaría en Supabase
+      const { data: ingresosReal, error } = await supabase
+        .from('pagos')
+        .select('*')
+        .order('fecha', { ascending: false })
+
+      if (error) throw error
+
+      // 2. Mapeamos los pagos a la estructura del Libro Diario
+      const ingresosMapeados = (ingresosReal || []).map(p => ({
+        id: p.id,
+        tipo: "ingreso",
+        fecha: p.fecha,
+        descripcion: `${p.concepto_categoria} - Recibo para: ${p.beneficiario}`,
+        monto: p.monto,
+        metodo: "Caja / Sistema"
+      }))
+
+      // 3. Cargamos los egresos guardados localmente
+      const guardados = localStorage.getItem('lume_egresos_manuales')
+      const egresosLocales = guardados ? JSON.parse(guardados) : []
+
+      // Combinamos ambos y ordenamos por fecha más reciente
+      const combinados = [...ingresosMapeados, ...egresosLocales].sort(
+        (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      )
+
+      setMovimientos(combinados)
+    } catch (e: any) {
+      toast.error("Error al sincronizar caja: " + e.message)
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  useEffect(() => {
+    cargarCajaReal()
+  }, [])
+
   const totalIngresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + Number(curr.monto), 0)
   const totalEgresos = movimientos.filter(m => m.tipo === 'egreso').reduce((acc, curr) => acc + Number(curr.monto), 0)
   const resultadoNeto = totalIngresos - totalEgresos
 
-  const agregarMovimiento = (nuevoMovimiento: any) => {
-    setMovimientos([nuevoMovimiento, ...movimientos])
+  const agregarMovimiento = async (nuevoMovimiento: any) => {
+    if (nuevoMovimiento.tipo === 'egreso') {
+      // Guardamos el egreso localmente para no interferir con la tabla estricta de pagos
+      const guardados = localStorage.getItem('lume_egresos_manuales')
+      const actuales = guardados ? JSON.parse(guardados) : []
+      const nuevos = [nuevoMovimiento, ...actuales]
+      localStorage.setItem('lume_egresos_manuales', JSON.stringify(nuevos))
+      toast.success("Gasto registrado en el libro diario.")
+      cargarCajaReal()
+    }
   }
 
   return (
@@ -40,15 +84,13 @@ export default function FinanzasDashboard() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print:hidden">
         <div>
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight italic">Tesorería Integral</h1>
-          <p className="text-muted-foreground mt-1 font-medium">Caja, gastos fijos y facturación.</p>
+          <p className="text-muted-foreground mt-1 font-medium">Caja, gastos fijos y facturación en tiempo real.</p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <Button onClick={() => { setTipoMovimiento('egreso'); setModalNuevoMovimiento(true) }} variant="outline" className="flex-1 border-destructive text-destructive hover:bg-destructive hover:text-white font-bold h-11 rounded-xl">
             <Minus className="h-4 w-4 mr-2" /> Gasto
           </Button>
-          <Button onClick={() => { setTipoMovimiento('ingreso'); setModalNuevoMovimiento(true) }} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 rounded-xl">
-            <Plus className="h-4 w-4 mr-2" /> Ingreso
-          </Button>
+          <p className="text-xs text-muted-foreground self-center hidden md:block">Los ingresos se registran desde el Directorio de Alumnos.</p>
         </div>
       </div>
 
@@ -58,7 +100,7 @@ export default function FinanzasDashboard() {
           Flujo de Caja
         </button>
         {modeloNegocio === 'mensual' && (
-          <button onClick={() => setPestañaActiva('deudas')} className={`px-4 py-2 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors whitespace-nowrap flex items-center gap-2 ${pestañaActiva === 'deudas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+          <button onClick={() => setPestañaActiva('deudas')} className={`px-4 py-2 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors whitespace-nowrap ${pestañaActiva === 'deudas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
             Deudores
           </button>
         )}
@@ -67,20 +109,24 @@ export default function FinanzasDashboard() {
         </button>
       </div>
 
-      {/* RENDERIZADO DE PESTAÑAS SEPARADAS PARA MAYOR VELOCIDAD */}
-      {pestañaActiva === 'resumen' && (
-        <TabFlujoCaja movimientos={movimientos} ingresos={totalIngresos} egresos={totalEgresos} neto={resultadoNeto} />
-      )}
-      
-      {pestañaActiva === 'deudas' && (
-        <TabDeudores />
+      {cargando ? (
+        <div className="py-12 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+      ) : (
+        <>
+          {pestañaActiva === 'resumen' && (
+            <TabFlujoCaja movimientos={movimientos} ingresos={totalIngresos} egresos={totalEgresos} neto={resultadoNeto} />
+          )}
+          
+          {pestañaActiva === 'deudas' && (
+            <TabDeudores />
+          )}
+
+          {pestañaActiva === 'proveedores' && (
+            <TabProveedores onAgregarEgreso={agregarMovimiento} />
+          )}
+        </>
       )}
 
-      {pestañaActiva === 'proveedores' && (
-        <TabProveedores onAgregarEgreso={agregarMovimiento} />
-      )}
-
-      {/* MODAL OPTIMIZADO */}
       {modalNuevoMovimiento && (
         <ModalMovimiento 
           tipo={tipoMovimiento} 
@@ -93,7 +139,7 @@ export default function FinanzasDashboard() {
 }
 
 // ============================================================================
-// SUB-COMPONENTE 1: FLUJO DE CAJA Y PDF
+// SUB-COMPONENTE 1: FLUJO DE CAJA
 // ============================================================================
 function TabFlujoCaja({ movimientos, ingresos, egresos, neto }: { movimientos: any[], ingresos: number, egresos: number, neto: number }) {
   return (
@@ -111,44 +157,33 @@ function TabFlujoCaja({ movimientos, ingresos, egresos, neto }: { movimientos: a
         </div>
         
         <div className="divide-y divide-border print:divide-black/20">
-          {movimientos.map((mov) => (
-            <div key={mov.id} className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className={`p-2 rounded-xl print:hidden ${mov.tipo === 'ingreso' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive'}`}>
-                  {mov.tipo === 'ingreso' ? <Plus className="h-5 w-5" /> : <Minus className="h-5 w-5" />}
+          {movimientos.length === 0 ? (
+            <p className="p-8 text-center text-muted-foreground italic text-sm">No hay movimientos registrados en este período.</p>
+          ) : (
+            movimientos.map((mov) => (
+              <div key={mov.id} className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className={`p-2 rounded-xl print:hidden ${mov.tipo === 'ingreso' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive'}`}>
+                    {mov.tipo === 'ingreso' ? <Plus className="h-5 w-5" /> : <Minus className="h-5 w-5" />}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground print:text-black">{mov.descripcion}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 print:text-black/60">{new Date(mov.fecha).toLocaleDateString('es-AR')} • {mov.metodo}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-bold text-sm text-foreground print:text-black">{mov.descripcion}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 print:text-black/60">{new Date(mov.fecha).toLocaleDateString('es-AR')} • {mov.metodo}</p>
-                </div>
+                <p className={`font-black text-base print:text-black ${mov.tipo === 'ingreso' ? 'text-emerald-600' : 'text-foreground'}`}>
+                  {mov.tipo === 'ingreso' ? '+' : '-'}${Number(mov.monto).toLocaleString('es-AR')}
+                </p>
               </div>
-              <p className={`font-black text-base print:text-black ${mov.tipo === 'ingreso' ? 'text-emerald-600' : 'text-foreground'}`}>
-                {mov.tipo === 'ingreso' ? '+' : '-'}${Number(mov.monto).toLocaleString('es-AR')}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* ESTE ES EL RESUMEN QUE SOLO APARECE EN EL PDF */}
-        <div className="hidden print:block p-6 mt-4 border-t-2 border-black">
-          <h4 className="font-black uppercase tracking-widest text-sm mb-4">Resumen del Período</h4>
-          <div className="flex justify-between items-center py-2 border-b border-gray-200">
-            <span className="font-bold">Total Ingresos:</span>
-            <span className="font-bold text-lg text-green-700">${ingresos.toLocaleString('es-AR')}</span>
-          </div>
-          <div className="flex justify-between items-center py-2 border-b border-gray-200">
-            <span className="font-bold">Total Egresos:</span>
-            <span className="font-bold text-lg text-red-700">-${egresos.toLocaleString('es-AR')}</span>
-          </div>
-          <div className="flex justify-between items-center py-4 mt-2">
-            <span className="font-black uppercase tracking-widest">Resultado Neto:</span>
-            <span className="font-black text-2xl">${neto.toLocaleString('es-AR')}</span>
-          </div>
+            ))
+          )}
         </div>
       </div>
     </div>
   )
 }
+
+// (Los sub-componentes TabDeudores, TabProveedores y ModalMovimiento quedan exactamente iguales a como los tenías)
 
 // ============================================================================
 // SUB-COMPONENTE 2: DEUDORES (WhatsApp Dinámico)

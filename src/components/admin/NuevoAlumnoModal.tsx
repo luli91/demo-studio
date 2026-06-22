@@ -32,10 +32,10 @@ export default function NuevoAlumnoModal({ abierto, modeloNegocio, onClose, onGu
     const creditosIniciales = modeloNegocio === 'reservas' && !esTutor ? parseInt(formData.get('creditos') as string) : 0
     
     const datosFlexibles = {
-      estado_cuota: 'al_dia',
+      estado_cuota: 'vencida',
       creditos_clases: creditosIniciales,
       contacto_urgencia: "", 
-      entrena: !esTutor, // Guardamos la decisión de Flor
+      entrena: !esTutor, 
       documentos: [],
       pagos: [],
       asistencias: []
