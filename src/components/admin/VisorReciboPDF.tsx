@@ -20,7 +20,7 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
     if (navigator.share) {
       navigator.share({
         title: 'Recibo Electrónico',
-        text: 'Te envío el comprobante de pago.',
+        text: `Te envío el comprobante de pago por $${recibo?.monto}.`,
         url: window.location.href
       }).catch(console.error);
     } else {
@@ -48,7 +48,7 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
           
           {/* Marca de Agua (Logo de Fondo) */}
           <div className="absolute inset-0 flex items-center justify-center opacity-[0.05] pointer-events-none">
-            <img src={academia.logo_url} alt="watermark" className="w-[80%] h-[80%] object-contain grayscale" />
+            <img src={academia.logo_url || "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff"} alt="watermark" className="w-[80%] h-[80%] object-contain grayscale" />
           </div>
 
           {/* ENCABEZADO */}
@@ -56,16 +56,16 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
             <div className="flex items-center gap-3">
               {/* Logo Arriba a la Izquierda */}
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-[3px] border-black flex items-center justify-center p-1 bg-white relative z-10 shrink-0 overflow-hidden">
-                <img src={academia.logo_url} className="w-full h-full object-cover" alt="Logo Academia" />
+                <img src={academia.logo_url || "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff"} className="w-full h-full object-cover" alt="Logo Academia" />
               </div>
               <div className="text-left max-w-[200px] sm:max-w-none">
-                <h2 className="text-lg sm:text-2xl font-black leading-none tracking-tight whitespace-pre-wrap" style={{fontFamily: "Arial, sans-serif"}}>{academia.nombre_corto}</h2>
+                <h2 className="text-lg sm:text-2xl font-black leading-none tracking-tight whitespace-pre-wrap" style={{fontFamily: "Arial, sans-serif"}}>{academia.nombre_corto || academia.nombre || "MI ACADEMIA"}</h2>
               </div>
             </div>
             
             <div className="text-right border-4 border-black p-2 sm:p-3 bg-white relative z-10 shrink-0">
               <h2 className="text-xl sm:text-3xl font-black tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>RECIBO X</h2>
-              <p className="text-[8px] sm:text-[10px] font-black mt-1 uppercase">Nº {recibo.nro_recibo}</p>
+              <p className="text-[8px] sm:text-[10px] font-black mt-1 uppercase">Nº {String(recibo.nro_recibo || 1).padStart(5, '0')}</p>
             </div>
           </div>
 
@@ -94,19 +94,19 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
             <div className="flex items-end gap-2">
               <span className="w-24 sm:w-32 shrink-0">Socio:</span>
               <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-xl sm:text-2xl uppercase tracking-wider text-blue-900/80 line-clamp-1" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
-                {recibo.beneficiario}
+                {recibo.beneficiario || recibo.profeNombre}
               </span>
             </div>
             <div className="flex items-end gap-2">
               <span className="w-24 sm:w-32 shrink-0">Pesos:</span>
               <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-xl sm:text-2xl tracking-wider text-blue-900/80" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
-                $ {recibo.monto.toLocaleString('es-AR')}
+                $ {Number(recibo.monto).toLocaleString('es-AR')}
               </span>
             </div>
             <div className="flex items-end gap-2">
               <span className="w-24 sm:w-32 shrink-0">Concepto:</span>
               <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-xl sm:text-2xl uppercase tracking-wider text-blue-900/80 truncate" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
-                {recibo.concepto_detalle}
+                {recibo.concepto_detalle || recibo.concepto}
               </span>
             </div>
           </div>
@@ -114,16 +114,23 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
           {/* FIRMA Y SELLO DE ADMINISTRACIÓN */}
           <div className="mt-20 flex justify-between items-end relative z-10">
             <div className="opacity-60">
-              <p className="text-[10px] font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>SYSTEM LUME</p>
+              <p className="text-[10px] font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academia.siglas || "APP"} SYSTEM</p>
             </div>
             <div className="text-center w-48 sm:w-64 relative">
-              {/* Firma Virtual (Cursiva con el nombre) */}
-              <div className="absolute -top-10 left-0 w-full flex justify-center text-blue-900/80" style={{fontFamily: "'Bradley Hand', cursive, sans-serif", fontSize: "2.5rem", transform: "rotate(-5deg)"}}>
-                {academia.admin_nombre}
+              
+              <div className="absolute -top-16 left-0 w-full flex justify-center items-center h-16">
+                {academia.firma_url ? (
+                  <img src={academia.firma_url} alt="Firma" className="max-h-16 object-contain mix-blend-multiply opacity-80" />
+                ) : (
+                  <span className="text-blue-900/80" style={{fontFamily: "'Bradley Hand', cursive, sans-serif", fontSize: "2.5rem", transform: "rotate(-5deg)"}}>
+                    {academia.admin_nombre || "Administración"}
+                  </span>
+                )}
               </div>
-              <div className="border-b-[2px] border-black mb-1 h-8"></div>
-              <p className="text-xs sm:text-sm font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academia.admin_nombre}</p>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5" style={{fontFamily: "Arial, sans-serif"}}>Administración</p>
+
+              <div className="border-b-[2px] border-black mb-1 h-2 mt-4"></div>
+              <p className="text-xs sm:text-sm font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academia.admin_nombre || "Administración"}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5" style={{fontFamily: "Arial, sans-serif"}}>Administración / Tesorería</p>
             </div>
           </div>
           

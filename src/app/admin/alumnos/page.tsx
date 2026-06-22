@@ -27,6 +27,15 @@ export default function AdminAlumnosPage() {
   const [filtroEtiqueta, setFiltroEtiqueta] = useState("")
   const [alumnos, setAlumnos] = useState<any[]>([])
 
+  // Estado para la info dinámica de la academia (¡Datos Reales!)
+  const [academiaOficial, setAcademiaOficial] = useState<any>({
+    nombre_largo: "MI ACADEMIA",
+    nombre_corto: "MI ACADEMIA",
+    logo_url: "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff",
+    admin_nombre: "Administración",
+    firma_url: ""
+  })
+
   // Estados de Modales
   const [modalCobro, setModalCobro] = useState<{abierto: boolean, familia: any[]}>({abierto: false, familia: []})
   const [reciboVisualizado, setReciboVisualizado] = useState<any | null>(null)
@@ -34,15 +43,6 @@ export default function AdminAlumnosPage() {
 
   const modeloNegocio = "mensual" 
   const textos = DICCIONARIO[modeloNegocio as keyof typeof DICCIONARIO]
-  
-  const academia = {
-    nombre_largo: "CLUB SOCIAL CULTURAL DEPORTIVO Y BIBLIOTECA",
-    nombre_corto: "C. S. C. D. y B.\nPEDRO LOZANO",
-    logo_url: "https://api.dicebear.com/7.x/shapes/svg?seed=Lozano&backgroundColor=ffffff",
-    admin_nombre: "Cynthia L. Medina",
-    siglas: "PL",
-    fundacion: "1939"
-  }
 
   // --- FUNCIONES DE BORRADO LÓGICO Y FÍSICO ---
   const handleArchivarAlumno = async (id: string) => {
@@ -71,6 +71,19 @@ export default function AdminAlumnosPage() {
 
   const cargarAlumnos = async () => {
     try {
+      // 0. TRAER CONFIGURACIÓN REAL DE LA ACADEMIA PARA EL PDF
+      const { data: aca } = await supabase.from("academias").select("*").limit(1).single()
+      if (aca) {
+        setAcademiaOficial({
+          nombre_largo: aca.nombre || "MI ACADEMIA",
+          nombre_corto: aca.nombre_corto || aca.nombre || "MI ACADEMIA",
+          siglas: aca.siglas || "APP",
+          logo_url: aca.logo_url || "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff",
+          firma_url: aca.firma_url || "",
+          admin_nombre: aca.admin_nombre || "Administración"
+        })
+      }
+
       // 1. Usuarios Oficiales
       const { data: dataOficial, error: errorOficial } = await supabase
         .from('usuarios')
@@ -95,7 +108,6 @@ export default function AdminAlumnosPage() {
       if (errorPagos) throw errorPagos
 
       const alumnasOficiales = (dataOficial || []).map((u: any) => {
-        // Buscamos los pagos específicos de este usuario
         const pagosAlumno = (dataPagos || []).filter(p => p.alumno_id === u.id)
 
         return {
@@ -106,11 +118,11 @@ export default function AdminAlumnosPage() {
           telefono: u.telefono,
           avatar_url: u.datos_flexibles?.avatar_url || null,
           titular_id: u.titular_id,
-          estado_cuota: u.datos_flexibles?.estado_cuota || 'vencida', // Refleja BD real
+          estado_cuota: u.datos_flexibles?.estado_cuota || 'vencida', 
           creditos: u.datos_flexibles?.creditos_clases || 0,
           contacto_urgencia: u.datos_flexibles?.contacto_urgencia || "",
           documentos: u.datos_flexibles?.documentos || [],
-          pagos: pagosAlumno, // Le enchufamos los pagos reales de Supabase
+          pagos: pagosAlumno, 
           asistencias: u.datos_flexibles?.asistencias || [],
           entrena: u.activa !== false,
           datos_flexibles: u.datos_flexibles || {},
@@ -129,7 +141,7 @@ export default function AdminAlumnosPage() {
         creditos: 0,
         contacto_urgencia: "",
         documentos: [],
-        pagos: [], // Las pre-inscripciones no tienen pagos
+        pagos: [], 
         asistencias: [],
         entrena: true,
         datos_flexibles: {},
@@ -157,19 +169,15 @@ export default function AdminAlumnosPage() {
 
   if (!isMounted) return null
 
-  const simularSubidaArchivo = () => {
-    cargarAlumnos()
-  }
-
-  const handleCambiarFotoAdmin = () => {
-    cargarAlumnos()
-  }
+  const simularSubidaArchivo = () => { cargarAlumnos() }
+  const handleCambiarFotoAdmin = () => { cargarAlumnos() }
 
   const handleCobrar = async (datos: any) => {
     if (datos.alumnosAPagar.length === 0) return toast.error("Seleccioná al menos un alumno.")
     
     try {
       const nombresBeneficiarios = alumnos.filter(a => datos.alumnosAPagar.includes(a.id)).map(a => a.nombre).join(" / ")
+      // Como Supabase ya tiene la columna SERIAL, este número es falso y se pisa, pero lo dejamos por compatibilidad visual temporal
       const nroRecibo = `0001-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`
 
       const { error: errorPago } = await supabase.from('pagos').insert({
@@ -205,26 +213,20 @@ export default function AdminAlumnosPage() {
     }
   }
 
-  // --- LÓGICA DE FILTRADO MAESTRA CORREGIDA ---
   const alumnosFiltrados = alumnos.filter(a => {
-    // 1. Filtro de Texto (Buscador)
     const coincideTexto = `${a.nombre}`.toLowerCase().includes(filtroTexto.toLowerCase()) || 
                           (a.email && a.email.toLowerCase().includes(filtroTexto.toLowerCase()))
-    
     if (!coincideTexto) return false
 
-    // 2. Filtro de Etiquetas y Estados
     if (filtroEtiqueta !== '') {
       if (filtroEtiqueta === 'deudores') return a.estado_cuota !== 'al_dia' && !a.es_preinscripcion
       if (filtroEtiqueta === 'tutores') return a.entrena === false
-      
-      // Si no es un filtro automático, buscamos en el array de etiquetas de datos_flexibles
       const tieneEtiqueta = a.datos_flexibles?.etiquetas?.includes(filtroEtiqueta)
       if (!tieneEtiqueta) return false
     }
 
-    return true // ACÁ FALTABA RETORNAR TRUE PARA QUE EL FILTRO SEPA QUE PASÓ
-  }) // ACÁ FALTABA CERRAR LA FUNCIÓN DEL FILTRO
+    return true 
+  }) 
 
   return (
     <div className="space-y-8 animate-in fade-in pb-12 max-w-6xl mx-auto">
@@ -266,7 +268,6 @@ export default function AdminAlumnosPage() {
         />
       )}
 
-      {/* MODALES EXTERNOS */}
       <NuevoAlumnoModal 
         abierto={modalPreRegistro}
         modeloNegocio={modeloNegocio}
@@ -284,7 +285,8 @@ export default function AdminAlumnosPage() {
         />
       )}
 
-      {reciboVisualizado && <VisorReciboPDF recibo={reciboVisualizado} academia={academia} onClose={() => setReciboVisualizado(null)} />}
+      {/* AHORA LE PASAMOS LA ACADEMIA OFICIAL DE LA BD, NO LA INVENTADA */}
+      {reciboVisualizado && <VisorReciboPDF recibo={reciboVisualizado} academia={academiaOficial} onClose={() => setReciboVisualizado(null)} />}
     </div>
   )
 }

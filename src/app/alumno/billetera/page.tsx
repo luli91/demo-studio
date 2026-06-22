@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase"
-import { Loader2, CreditCard, Receipt, CheckCircle2, Printer, X, Share2 } from "lucide-react"
+import { Loader2, CreditCard, Receipt, CheckCircle2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+
+// IMPORTAMOS EL COMPONENTE UNIFICADO DEL RECIBO
+import VisorReciboPDF from "@/components/admin/VisorReciboPDF"
 
 export default function BilleteraPage() {
   const supabase = createClient()
@@ -20,6 +25,7 @@ export default function BilleteraPage() {
     nombre_corto: "MI ACADEMIA",
     siglas: "APP",
     logo_url: "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff",
+    firma_url: "",
     admin_nombre: "Administración"
   })
 
@@ -29,28 +35,25 @@ export default function BilleteraPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // 2. Traer perfil del usuario para saber su academia_id
-      const { data: perfilOficial } = await supabase.from("usuarios").select("academia_id").eq("id", user.id).single()
+      // 2. Traer configuración real de la academia directo de la BD
+      const { data: aca } = await supabase.from("academias").select("*").limit(1).single()
       
-      if (perfilOficial?.academia_id) {
-        // 3. Cargar la configuración real de la academia dueño del espacio
-        const { data: aca } = await supabase.from("academias").select("*").eq("id", perfilOficial.academia_id).single()
-        if (aca) {
-          setAcademiaInfo({
-            nombre_largo: aca.nombre.toUpperCase(),
-            nombre_corto: aca.nombre,
-            siglas: aca.nombre.substring(0, 3).toUpperCase(),
-            logo_url: aca.logo_url || "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff",
-            admin_nombre: "Tesorería Oficial"
-          })
-        }
+      if (aca) {
+        setAcademiaInfo({
+          nombre_largo: aca.nombre || "MI ACADEMIA",
+          nombre_corto: aca.nombre_corto || aca.nombre || "MI ACADEMIA",
+          siglas: aca.siglas || "APP",
+          logo_url: aca.logo_url || "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff",
+          firma_url: aca.firma_url || "",
+          admin_nombre: aca.admin_nombre || "Administración"
+        })
       }
 
-      // 4. Buscar hijos vinculados para consolidar la billetera familiar
+      // 3. Buscar hijos vinculados para consolidar la billetera familiar
       const { data: hijos } = await supabase.from("usuarios").select("id").eq("titular_id", user.id)
       const listaIds = [user.id, ...(hijos?.map(h => h.id) || [])]
 
-      // 5. Cargar pagos reales de la base de datos
+      // 4. Cargar pagos reales de la base de datos
       const { data: dataPagos } = await supabase
         .from("pagos")
         .select("*")
@@ -63,22 +66,6 @@ export default function BilleteraPage() {
 
     cargarDatosBilletera()
   }, [supabase])
-
-  const formatearFechaCorta = (fechaIso: string) => {
-    return new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }).format(new Date(fechaIso))
-  }
-
-  const manejarCompartir = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: `Recibo de Pago - ${academiaInfo.siglas}`,
-        text: `Te envío el comprobante de pago por $${reciboVisualizado?.monto}.`,
-        url: window.location.href
-      }).catch(console.error);
-    } else {
-      toast.info("Compartir no soportado en tu navegador. Probá desde el celular.");
-    }
-  }
 
   if (cargando) return <div className="flex h-[70vh] justify-center items-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
@@ -120,102 +107,15 @@ export default function BilleteraPage() {
         )}
       </div>
 
+      {/* AHORA USAMOS EL COMPONENTE UNIFICADO EN VEZ DEL HTML REPETIDO */}
       {reciboVisualizado && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="w-full max-w-2xl flex flex-col gap-4 relative">
-            
-            <div className="flex justify-between items-center bg-card p-4 rounded-2xl">
-              <h3 className="font-black uppercase tracking-widest text-sm flex items-center gap-2"><Receipt className="h-4 w-4 text-primary" /> Recibo Electrónico</h3>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={() => {toast.success("Preparando PDF..."); setTimeout(()=>window.print(), 500)}} className="h-8 font-bold gap-2 text-xs">
-                  <Printer className="h-3.5 w-3.5"/> PDF / Imprimir
-                </Button>
-                <Button variant="secondary" size="sm" onClick={manejarCompartir} className="h-8 font-bold gap-2 text-xs bg-blue-600 hover:bg-blue-700 text-white">
-                  <Share2 className="h-3.5 w-3.5"/> Compartir
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => setReciboVisualizado(null)} className="h-8 w-8 ml-2 bg-destructive/10 text-destructive hover:bg-destructive hover:text-white rounded-full">
-                  <X className="h-4 w-4"/>
-                </Button>
-              </div>
-            </div>
-
-            <div className="bg-[#fdfdfc] text-black p-8 sm:p-10 rounded-sm shadow-2xl relative overflow-hidden select-none" style={{fontFamily: "'Courier New', Courier, monospace"}}>
-              <div className="absolute inset-0 flex items-center justify-center opacity-[0.05] pointer-events-none">
-                <img src={academiaInfo.logo_url} alt="Marca de Agua" className="w-[80%] h-[80%] object-contain grayscale" />
-              </div>
-
-              <div className="flex justify-between items-start border-b-[3px] border-black/80 pb-6 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-[3px] border-black flex items-center justify-center p-1 bg-white relative z-10 shrink-0 overflow-hidden">
-                    <img src={academiaInfo.logo_url} alt="Logo Institución" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="text-left max-w-[200px] sm:max-w-none">
-                    <h2 className="text-lg sm:text-2xl font-black leading-none tracking-tight whitespace-pre-wrap" style={{fontFamily: "Arial, sans-serif"}}>{academiaInfo.nombre_corto}</h2>
-                  </div>
-                </div>
-                <div className="text-right border-4 border-black p-2 sm:p-3 bg-white relative z-10 shrink-0">
-                  <h2 className="text-xl sm:text-3xl font-black tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>RECIBO X</h2>
-                  <p className="text-[8px] sm:text-[10px] font-black mt-1 uppercase">Nº {reciboVisualizado.nro_recibo}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-                <div className="flex flex-wrap gap-2 text-xs font-bold uppercase">
-                  {['CUOTA', 'FICHAJE', 'INSCRIPCION', 'OTROS'].map(cat => (
-                    <div key={cat} className="border-2 border-black flex items-center bg-white relative z-10">
-                      <div className="px-2 py-1 border-r-2 border-black">{cat}</div>
-                      <div className="w-8 flex justify-center py-1 font-black text-lg">
-                        {reciboVisualizado.concepto_categoria === cat ? 'X' : ''}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-lg font-bold flex items-end gap-2 whitespace-nowrap">
-                  <span>Fecha:</span>
-                  <span className="border-b-[2px] border-dashed border-black px-4 pb-1 text-xl font-medium tracking-widest text-blue-900/80" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
-                    {formatearFechaCorta(reciboVisualizado.fecha).replace(/\//g, ' / ')}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-8 text-lg sm:text-xl font-bold mt-10">
-                <div className="flex items-end gap-2">
-                  <span className="w-24 sm:w-32 shrink-0">Socio:</span>
-                  <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-xl sm:text-2xl uppercase tracking-wider text-blue-900/80 line-clamp-1" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
-                    {reciboVisualizado.beneficiario}
-                  </span>
-                </div>
-                <div className="flex items-end gap-2">
-                  <span className="w-24 sm:w-32 shrink-0">Pesos:</span>
-                  <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-xl sm:text-2xl tracking-wider text-blue-900/80" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
-                    $ {Number(reciboVisualizado.monto).toLocaleString('es-AR')}
-                  </span>
-                </div>
-                <div className="flex items-end gap-2">
-                  <span className="w-24 sm:w-32 shrink-0">Concepto:</span>
-                  <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-xl sm:text-2xl uppercase tracking-wider text-blue-900/80 truncate" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
-                    {reciboVisualizado.concepto_detalle}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-20 flex justify-between items-end relative z-10">
-                <div className="opacity-60">
-                  <p className="text-[10px] font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academiaInfo.siglas} SYSTEM</p>
-                </div>
-                <div className="text-center w-48 sm:w-64 relative">
-                  <div className="absolute -top-12 left-0 w-full flex justify-center text-blue-900/80" style={{fontFamily: "'Bradley Hand', cursive, sans-serif", fontSize: "2.5rem", transform: "rotate(-8deg)"}}>
-                    {academiaInfo.admin_nombre}
-                  </div>
-                  <div className="border-b-[2px] border-black mb-1 h-8 mt-4"></div>
-                  <p className="text-xs sm:text-sm font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academiaInfo.admin_nombre}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5" style={{fontFamily: "Arial, sans-serif"}}>Administración / Tesorería</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <VisorReciboPDF 
+          recibo={reciboVisualizado} 
+          academia={academiaInfo} 
+          onClose={() => setReciboVisualizado(null)} 
+        />
       )}
+      
     </div>
   )
 }

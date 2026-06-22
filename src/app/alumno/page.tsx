@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Clock, AlertCircle, CheckCircle2, Loader2, User, Users } from "lucide-react"
+import { Clock, AlertCircle, CheckCircle2, Loader2, Users, Megaphone } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 
@@ -13,15 +13,18 @@ export default function PanelAlumnoPage() {
   const router = useRouter()
   const supabase = createClient()
   const [usuarioPrincipal, setUsuarioPrincipal] = useState<any>(null)
-  
-  // Usamos esta lista para saber a quiénes hay que cobrarles y mostrarles clases
   const [familiaresQueEntrenan, setFamiliaresQueEntrenan] = useState<any[]>([])
-  
   const [perfilActivo, setPerfilActivo] = useState<any>(null) 
   const [cargando, setCargando] = useState(true)
-  
   const [usaReservas, setUsaReservas] = useState<boolean>(true)
   const [proximasClases, setProximasClases] = useState<any[]>([])
+  
+  // ESTADO PARA LA CARTELERA DIGITAL
+  const [cartelera, setCartelera] = useState({
+    titulo: "",
+    descripcion: "",
+    imagen_url: ""
+  })
 
   useEffect(() => {
     const obtenerDatos = async () => {
@@ -40,8 +43,16 @@ export default function PanelAlumnoPage() {
       }
 
       if (perfilOficial.academia_id) {
-        const { data: academia } = await supabase.from('academias').select('usa_reservas').eq('id', perfilOficial.academia_id).single()
-        if (academia) setUsaReservas(academia.usa_reservas)
+        // Traemos también los datos de la cartelera
+        const { data: academia } = await supabase.from('academias').select('usa_reservas, cartelera_titulo, cartelera_descripcion, cartelera_imagen_url').eq('id', perfilOficial.academia_id).single()
+        if (academia) {
+          setUsaReservas(academia.usa_reservas)
+          setCartelera({
+            titulo: academia.cartelera_titulo || "Cartelera Digital",
+            descripcion: academia.cartelera_descripcion || "Mantente al tanto de todas las novedades, feriados y torneos de la academia.",
+            imagen_url: academia.cartelera_imagen_url || ""
+          })
+        }
       }
 
       const datosPadre = {
@@ -64,10 +75,9 @@ export default function PanelAlumnoPage() {
         creditos: h.datos_flexibles?.creditos_clases || 0
       }))
 
-      // ARMAMOS LA LISTA ESTRICTA DE QUIÉNES ENTRENAN
       const listaEntrenan = []
-      if (datosPadre.entrena) listaEntrenan.push(datosPadre) // Si el adulto entrena, entra en la lista
-      listaEntrenan.push(...hijosMapeados) // Todos los hijos entran en la lista
+      if (datosPadre.entrena) listaEntrenan.push(datosPadre) 
+      listaEntrenan.push(...hijosMapeados) 
 
       setUsuarioPrincipal(datosPadre)
       setFamiliaresQueEntrenan(listaEntrenan)
@@ -104,7 +114,6 @@ export default function PanelAlumnoPage() {
 
   if (cargando) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
-  // Si la cuenta es solo tutora y no tiene hijos vinculados aún:
   if (familiaresQueEntrenan.length === 0) {
     return (
       <div className="space-y-8 max-w-5xl mx-auto animate-in fade-in pb-12 pt-8 text-center">
@@ -165,7 +174,6 @@ export default function PanelAlumnoPage() {
         </div>
       )}
 
-      {/* ESTADO FINANCIERO GRUPAL: Vemos las deudas de todos los que entrenan */}
       <div className="border-t border-border pt-4">
         <h2 className="text-xl font-black uppercase tracking-widest text-muted-foreground mb-4">Estado de Cuenta Familiar</h2>
         
@@ -234,13 +242,23 @@ export default function PanelAlumnoPage() {
           </div>
         )}
 
-        <div className="space-y-4 mt-8">
-          <h3 className="text-sm font-black text-muted-foreground uppercase tracking-widest">Avisos de la Institución</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="bg-card border border-border rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-base uppercase font-black">Cartelera Digital</CardTitle>
-                <CardDescription className="font-medium text-xs">Mantente al tanto de todas las novedades, feriados y torneos de la academia.</CardDescription>
+        {/* CARTELERA DIGITAL */}
+        <div className="space-y-4 mt-12">
+          <h3 className="text-sm font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <Megaphone className="h-4 w-4" /> Avisos de la Institución
+          </h3>
+          <div className="grid gap-4">
+            <Card className="bg-card border border-border shadow-md rounded-[2rem] overflow-hidden">
+              {cartelera.imagen_url && (
+                <div className="w-full h-48 sm:h-64 bg-secondary/20 border-b border-border">
+                  <img src={cartelera.imagen_url} alt="Aviso institucional" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <CardHeader className="p-6 sm:p-8">
+                <CardTitle className="text-xl sm:text-2xl uppercase font-black tracking-tight">{cartelera.titulo}</CardTitle>
+                <CardDescription className="font-medium text-sm sm:text-base whitespace-pre-wrap mt-2 text-foreground/80">
+                  {cartelera.descripcion}
+                </CardDescription>
               </CardHeader>
             </Card>
           </div>
