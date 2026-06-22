@@ -260,8 +260,8 @@ export default function PanelAlumnoPage() {
                 <Card key={aviso.id} className="bg-card border border-border shadow-md rounded-[2rem] overflow-hidden flex flex-col justify-between">
                   <div>
                     {aviso.imagen_url && (
-                      <div className="w-full h-44 sm:h-52 bg-secondary/20 border-b border-border overflow-hidden">
-                        <img src={aviso.imagen_url} alt={aviso.titulo} className="w-full h-full object-cover" />
+                      <div className="w-full h-48 sm:h-64 bg-secondary/20 border-b border-border">
+                        <img src={aviso.imagen_url} alt="Aviso" className="w-full h-full object-cover" />
                       </div>
                     )}
                     <CardHeader className="p-6">

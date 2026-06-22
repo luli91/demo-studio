@@ -69,11 +69,15 @@ export default function Hero({ config }: HeroProps) {
 
         {/* Columna Derecha: Imagen de Portada y Sello Circular */}
         <div className="flex-1 relative w-full h-[60vh] lg:h-[calc(100vh-80px)] animate-in fade-in slide-in-from-right-10 duration-1000 z-10">
+          {config.hero.foto_portada && config.hero.foto_portada.trim() !== "" ? (
           <img 
             src={config.hero.foto_portada} 
             alt="Portada del Estudio" 
             className="w-full h-full object-cover object-center grayscale hover:grayscale-0 transition-all duration-700" 
           />
+        ) : (
+          <div className="w-full h-full bg-slate-200" />
+        )}
           
           {/* SELLO CIRCULAR ANIMADO */}
           <div className="absolute -left-16 bottom-20 hidden xl:block">

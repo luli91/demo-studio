@@ -127,10 +127,10 @@ export default function ListaDirectorio({
                       ? 'bg-amber-500/10 border-2 border-dashed border-amber-500 text-amber-600' 
                       : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground'
                   }`}>
-                    {alumno.avatar_url ? (
+                    {alumno.avatar_url && alumno.avatar_url.trim() !== "" ? (
                       <img src={alumno.avatar_url} alt="avatar" className="h-full w-full object-cover" />
                     ) : (
-                      `${alumno.nombre.charAt(0)}${alumno.apellido ? alumno.apellido.charAt(0) : ''}`
+                      <div className="h-full w-full bg-slate-200" />
                     )}
                   </div>
 

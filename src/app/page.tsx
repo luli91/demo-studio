@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase"
+import { Loader2 } from "lucide-react" // Importamos loader por si tarda
 
 // Componentes importados
 import Navbar from "@/components/landing/Navbar"
@@ -17,23 +18,17 @@ import Contacto from "@/components/landing/Contacto"
 export default function LandingSaaS() {
   const supabase = createClient()
   const [scrolled, setScrolled] = useState(false)
+  const [cargando, setCargando] = useState(true)
   
   const [eventos, setEventos] = useState<any[]>([])
   const [galeria, setGaleria] = useState<any[]>([])
   const [disciplinas, setDisciplinas] = useState<any[]>([])
+  const [equipo, setEquipo] = useState<any[]>([])
   const [whatsapp, setWhatsapp] = useState("5491100000000") 
 
-  // Fallbacks genéricos para el producto Marca Blanca
   const [config, setConfig] = useState<any>({
     nombreEstudio: "Sync Studio",
-    hero: { 
-      foto_portada: "/portada-estudio.jpg", 
-      frase_streets: "Movimiento, fuerza y disciplina." 
-    },
-    sobreMi: { 
-      foto: "https://images.unsplash.com/photo-1548690312-e3b507d8c110?auto=format&fit=crop&q=80", 
-      texto: "Tu objetivo es nuestro objetivo. Sumate al equipo." 
-    },
+    hero: { foto_portada: "", frase_streets: "" },
     spotify: { canciones: [] } 
   })
 
@@ -47,7 +42,7 @@ export default function LandingSaaS() {
       const [resEv, resGal, resDisc, resConf] = await Promise.all([
         supabase.from("landing_clases").select("*").eq("es_evento", true).gte("fecha", hoy).order("fecha", { ascending: true }),
         supabase.from("landing_multimedia").select("*").order("orden"),
-        supabase.from("landing_disciplinas").select("*").order("orden"),
+        supabase.from("landing_disciplinas").select("*"),
         supabase.from("landing_configuracion").select("*")
       ])
 
@@ -57,23 +52,33 @@ export default function LandingSaaS() {
       
       if (resConf.data) {
         const c = resConf.data;
-        let spot = c.find(x => x.key === 'landing_spotify')?.valor || { canciones: [] };
-        if (spot.url && !spot.canciones) spot = { canciones: [spot.url] };
+        
+        // Buscamos helpers para encontrar valores en el JSON de configuración
+        const findVal = (key: string, fallback: any) => {
+          const item = c.find((x: any) => x.key === key);
+          return item ? (typeof item.valor === 'string' ? JSON.parse(item.valor) : item.valor) : fallback;
+        }
 
-        /*setConfig({
-          nombreEstudio: c.find(x => x.key === 'nombre_estudio')?.valor || config.nombreEstudio,
-          hero: c.find(x => x.key === 'landing_hero')?.valor || config.hero,
-          sobreMi: c.find(x => x.key === 'landing_sobre_mi')?.valor || config.sobreMi,
-          spotify: spot
-        })*/
+        setConfig({
+          nombreEstudio: findVal('nombre_estudio', 'Sync Studio'),
+          hero: {
+            foto_portada: findVal('hero_portada', ""),
+            frase_streets: findVal('hero_frase', "Movimiento, fuerza y disciplina.")
+          },
+          spotify: { canciones: findVal('spotify', []) }
+        })
 
-        const tel = c.find(x => x.key === 'reglas')?.valor?.whatsapp_estudio;
-        if (tel) setWhatsapp(tel);
+        setEquipo(findVal('equipo', []))
+        setWhatsapp(findVal('whatsapp', "5491100000000"))
       }
+      setCargando(false)
     }
+    
     fetchData()
     return () => window.removeEventListener('scroll', handleScroll)
   }, [supabase])
+
+  if (cargando) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
 
   return (
     <div className="relative min-h-screen bg-white overflow-x-hidden font-sans text-slate-900 selection:bg-slate-900 selection:text-white">
@@ -81,7 +86,7 @@ export default function LandingSaaS() {
       <Hero config={config} />
       <Clases disciplinas={disciplinas} />
       <Galeria galeria={galeria} />
-      <SobreMi />
+      <SobreMi equipo={equipo} />
       <Eventos eventos={eventos} whatsapp={whatsapp} />
       <Spotify spotify={config.spotify} />
       <Contacto whatsapp={whatsapp} />

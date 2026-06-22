@@ -119,12 +119,10 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
             <div className="text-center w-48 sm:w-64 relative">
               
               <div className="absolute -top-16 left-0 w-full flex justify-center items-center h-16">
-                {academia.firma_url ? (
-                  <img src={academia.firma_url} alt="Firma" className="max-h-16 object-contain mix-blend-multiply opacity-80" />
+                {academia.firma_url && academia.firma_url.trim() !== "" ? (
+                  <img src={academia.firma_url} alt="Firma" className="..." />
                 ) : (
-                  <span className="text-blue-900/80" style={{fontFamily: "'Bradley Hand', cursive, sans-serif", fontSize: "2.5rem", transform: "rotate(-5deg)"}}>
-                    {academia.admin_nombre || "Administración"}
-                  </span>
+                  <span className="...">{academia.admin_nombre}</span>
                 )}
               </div>
 

@@ -24,7 +24,7 @@ export default function Clases({ disciplinas }: ClasesProps) {
           disciplinas.map((clase, i) => (
             <div key={clase.id} className="group cursor-default">
               <div className="h-80 bg-slate-100 rounded-none overflow-hidden relative mb-6 grayscale group-hover:grayscale-0 transition-all duration-700">
-                {clase.imagen_url ? (
+                {clase.imagen_url && clase.imagen_url.trim() !== "" ? (
                   <img 
                     src={clase.imagen_url} 
                     className="w-full h-full object-cover" 
