@@ -189,39 +189,65 @@ function TabFlujoCaja({ movimientos, ingresos, egresos, neto }: { movimientos: a
 // SUB-COMPONENTE 2: DEUDORES (WhatsApp Dinámico)
 // ============================================================================
 function TabDeudores() {
-  const deudores = [
-    { id: 1, nombre: "Martina López", concepto: "Cuota Junio - Acrobacia", monto: 18000, diasAtraso: 5, telefono: "5491122334455" },
-    { id: 2, nombre: "Julieta Ramírez", concepto: "Cuota Junio - Futsal", monto: 15000, diasAtraso: 2, telefono: "5491198765432" },
-  ]
+  const [listaDeudores, setListaDeudores] = useState<any[]>([])
+  const [cargando, setCargando] = useState(true)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const fetchDeudores = async () => {
+      // Usamos el operador ->> para extraer el valor como texto y filtrar
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('id, nombre, telefono, datos_flexibles')
+        .or('datos_flexibles->>estado_cuota.eq.vencida,datos_flexibles->>estado_cuota.eq.deuda')
+
+      if (data) {
+        setListaDeudores(data)
+      }
+      setCargando(false)
+    }
+    fetchDeudores()
+  }, [])
+
+  if (cargando) return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2 print:hidden">
       <div className="bg-card rounded-2xl border border-destructive/20 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-border bg-destructive/5 flex items-center gap-2 text-destructive">
           <UserMinus className="h-6 w-6" />
-          <h3 className="font-black text-lg uppercase tracking-tight">Seguimiento de Morosos</h3>
+          <h3 className="font-black text-lg uppercase tracking-tight">Seguimiento de Morosos ({listaDeudores.length})</h3>
         </div>
         <div className="divide-y divide-border">
-          {deudores.map((deuda) => {
-            // ACÁ SE ARMA EL LINK DINÁMICO CON EL TELÉFONO DE LA CHICA
-            const mensaje = `Hola ${deuda.nombre.split(' ')[0]}, nos comunicamos desde la administración. Te recordamos el pago de ${deuda.concepto} por $${deuda.monto}. ¡Avisanos cuando lo abones!`;
-            const linkWhatsApp = `https://wa.me/${deuda.telefono}?text=${encodeURIComponent(mensaje)}`;
+          {listaDeudores.length === 0 ? (
+            <p className="p-8 text-center text-muted-foreground italic">¡No hay deudores registrados!</p>
+          ) : (
+            listaDeudores.map((deuda) => {
+              const telLimpio = deuda.telefono ? deuda.telefono.replace(/\D/g, '') : "";
+              const mensaje = `Hola ${deuda.nombre.split(' ')[0]}, te escribimos desde ${"tu academia"}. Te recordamos que tenés una cuota pendiente. ¡Avisanos cuando realices el pago!`;
+              const linkWhatsApp = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensaje)}`;
 
-            return (
-              <div key={deuda.id} className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-foreground">{deuda.nombre}</p>
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3 text-amber-500" /> Atraso de {deuda.diasAtraso} días</p>
+              return (
+                <div key={deuda.id} className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors">
+                  <div>
+                    <p className="font-bold text-foreground">{deuda.nombre}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Tel: {deuda.telefono || "Sin teléfono"}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {telLimpio ? (
+                      <a href={linkWhatsApp} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" className="border-emerald-600 text-emerald-600 hover:bg-emerald-600 hover:text-white font-bold text-xs">
+                          Enviar WhatsApp
+                        </Button>
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">Sin celular cargado</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <p className="font-black text-destructive text-lg">${deuda.monto.toLocaleString('es-AR')}</p>
-                  <a href={linkWhatsApp} target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" className="border-emerald-600 text-emerald-600 hover:bg-emerald-600 hover:text-white font-bold">Enviar WhatsApp</Button>
-                  </a>
-                </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
       </div>
     </div>
