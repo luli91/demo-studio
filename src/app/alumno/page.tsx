@@ -19,12 +19,8 @@ export default function PanelAlumnoPage() {
   const [usaReservas, setUsaReservas] = useState<boolean>(true)
   const [proximasClases, setProximasClases] = useState<any[]>([])
   
-  // ESTADO PARA LA CARTELERA DIGITAL
-  const [cartelera, setCartelera] = useState({
-    titulo: "",
-    descripcion: "",
-    imagen_url: ""
-  })
+  // NUEVO ESTADO PARA ALMACENAR LA LISTA DE AVISOS DE LA BD
+  const [eventos, setEventos] = useState<any[]>([])
 
   useEffect(() => {
     const obtenerDatos = async () => {
@@ -43,15 +39,22 @@ export default function PanelAlumnoPage() {
       }
 
       if (perfilOficial.academia_id) {
-        // Traemos también los datos de la cartelera
-        const { data: academia } = await supabase.from('academias').select('usa_reservas, cartelera_titulo, cartelera_descripcion, cartelera_imagen_url').eq('id', perfilOficial.academia_id).single()
+        // CORRECCIÓN: Seleccionamos la columna eventos_cartelera en lugar de las individuales
+        const { data: academia } = await supabase
+          .from('academias')
+          .select('usa_reservas, eventos_cartelera')
+          .eq('id', perfilOficial.academia_id)
+          .single()
+
         if (academia) {
           setUsaReservas(academia.usa_reservas)
-          setCartelera({
-            titulo: academia.cartelera_titulo || "Cartelera Digital",
-            descripcion: academia.cartelera_descripcion || "Mantente al tanto de todas las novedades, feriados y torneos de la academia.",
-            imagen_url: academia.cartelera_imagen_url || ""
-          })
+          
+          // Parseamos la lista de avisos de forma segura por si viene como String o JSON puro
+          const listaAvisos = typeof academia.eventos_cartelera === 'string'
+            ? JSON.parse(academia.eventos_cartelera)
+            : (academia.eventos_cartelera || [])
+            
+          setEventos(listaAvisos)
         }
       }
 
@@ -242,25 +245,38 @@ export default function PanelAlumnoPage() {
           </div>
         )}
 
-        {/* CARTELERA DIGITAL */}
+        {/* CARTELERA DIGITAL ACTUALIZADA: RENDERIZA LA GRID COMPLETA DE AVISOS REALES */}
         <div className="space-y-4 mt-12">
           <h3 className="text-sm font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
             <Megaphone className="h-4 w-4" /> Avisos de la Institución
           </h3>
-          <div className="grid gap-4">
-            <Card className="bg-card border border-border shadow-md rounded-[2rem] overflow-hidden">
-              {cartelera.imagen_url && (
-                <div className="w-full h-48 sm:h-64 bg-secondary/20 border-b border-border">
-                  <img src={cartelera.imagen_url} alt="Aviso institucional" className="w-full h-full object-cover" />
-                </div>
-              )}
-              <CardHeader className="p-6 sm:p-8">
-                <CardTitle className="text-xl sm:text-2xl uppercase font-black tracking-tight">{cartelera.titulo}</CardTitle>
-                <CardDescription className="font-medium text-sm sm:text-base whitespace-pre-wrap mt-2 text-foreground/80">
-                  {cartelera.descripcion}
-                </CardDescription>
-              </CardHeader>
-            </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {eventos.length === 0 ? (
+              <Card className="col-span-1 md:col-span-2 bg-card border border-border rounded-[2rem] p-8 text-center text-muted-foreground italic text-sm">
+                No hay avisos recientes publicados por la academia en este momento.
+              </Card>
+            ) : (
+              eventos.map((aviso: any) => (
+                <Card key={aviso.id} className="bg-card border border-border shadow-md rounded-[2rem] overflow-hidden flex flex-col justify-between">
+                  <div>
+                    {aviso.imagen_url && (
+                      <div className="w-full h-44 sm:h-52 bg-secondary/20 border-b border-border overflow-hidden">
+                        <img src={aviso.imagen_url} alt={aviso.titulo} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <CardHeader className="p-6">
+                      <CardTitle className="text-lg sm:text-xl uppercase font-black tracking-tight">{aviso.titulo}</CardTitle>
+                      <CardDescription className="font-medium text-xs sm:text-sm whitespace-pre-wrap mt-2 text-foreground/80 leading-relaxed">
+                        {aviso.descripcion}
+                      </CardDescription>
+                    </CardHeader>
+                  </div>
+                  <div className="px-6 pb-4 pt-2 border-t border-border/20 text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                    Publicado el {new Date(aviso.fecha).toLocaleDateString('es-AR')}
+                  </div>
+                </Card>
+              ))
+            )}
           </div>
         </div>
 
