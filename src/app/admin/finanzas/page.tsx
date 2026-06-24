@@ -16,7 +16,7 @@ export default function FinanzasDashboard() {
   const [tipoMovimiento, setTipoMovimiento] = useState<'ingreso' | 'egreso'>('ingreso')
   const [cargando, setCargando] = useState(true)
 
-  // Movimientos unificados (Ingresos de Supabase + Egresos locales)
+  // Movimientos unificados (Ingresos de Supabase + Ingresos locales de Sponsors + Egresos locales)
   const [movimientos, setMovimientos] = useState<any[]>([])
 
   const cargarCajaReal = async () => {
@@ -37,15 +37,15 @@ export default function FinanzasDashboard() {
         fecha: p.fecha,
         descripcion: `${p.concepto_categoria} - Recibo para: ${p.beneficiario}`,
         monto: p.monto,
-        metodo: "Caja / Sistema"
+        metodo: "Sistema Central"
       }))
 
-      // 3. Cargamos los egresos guardados localmente
-      const guardados = localStorage.getItem('lume_egresos_manuales')
-      const egresosLocales = guardados ? JSON.parse(guardados) : []
+      // 3. Cargamos los egresos e ingresos manuales (ej: sponsors) guardados localmente
+      const guardados = localStorage.getItem('lume_movimientos_manuales')
+      const movsLocales = guardados ? JSON.parse(guardados) : []
 
       // Combinamos ambos y ordenamos por fecha más reciente
-      const combinados = [...ingresosMapeados, ...egresosLocales].sort(
+      const combinados = [...ingresosMapeados, ...movsLocales].sort(
         (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       )
 
@@ -66,15 +66,14 @@ export default function FinanzasDashboard() {
   const resultadoNeto = totalIngresos - totalEgresos
 
   const agregarMovimiento = async (nuevoMovimiento: any) => {
-    if (nuevoMovimiento.tipo === 'egreso') {
-      // Guardamos el egreso localmente para no interferir con la tabla estricta de pagos
-      const guardados = localStorage.getItem('lume_egresos_manuales')
-      const actuales = guardados ? JSON.parse(guardados) : []
-      const nuevos = [nuevoMovimiento, ...actuales]
-      localStorage.setItem('lume_egresos_manuales', JSON.stringify(nuevos))
-      toast.success("Gasto registrado en el libro diario.")
-      cargarCajaReal()
-    }
+    // Guardamos localmente tanto egresos como ingresos manuales (Sponsors, ventas extra)
+    const guardados = localStorage.getItem('lume_movimientos_manuales')
+    const actuales = guardados ? JSON.parse(guardados) : []
+    const nuevos = [nuevoMovimiento, ...actuales]
+    localStorage.setItem('lume_movimientos_manuales', JSON.stringify(nuevos))
+    
+    toast.success(nuevoMovimiento.tipo === 'egreso' ? "Gasto registrado." : "Ingreso extra registrado.")
+    cargarCajaReal()
   }
 
   return (
@@ -87,10 +86,13 @@ export default function FinanzasDashboard() {
           <p className="text-muted-foreground mt-1 font-medium">Caja, gastos fijos y facturación en tiempo real.</p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
+          {/* Botón de Ingreso reactivado para cobrarle a los Sponsors */}
+          <Button onClick={() => { setTipoMovimiento('ingreso'); setModalNuevoMovimiento(true) }} variant="outline" className="flex-1 border-emerald-600 text-emerald-600 hover:bg-emerald-600 hover:text-white font-bold h-11 rounded-xl">
+            <Plus className="h-4 w-4 mr-2" /> Ingreso Extra
+          </Button>
           <Button onClick={() => { setTipoMovimiento('egreso'); setModalNuevoMovimiento(true) }} variant="outline" className="flex-1 border-destructive text-destructive hover:bg-destructive hover:text-white font-bold h-11 rounded-xl">
             <Minus className="h-4 w-4 mr-2" /> Gasto
           </Button>
-          <p className="text-xs text-muted-foreground self-center hidden md:block">Los ingresos se registran desde el Directorio de Alumnos.</p>
         </div>
       </div>
 
@@ -183,10 +185,9 @@ function TabFlujoCaja({ movimientos, ingresos, egresos, neto }: { movimientos: a
   )
 }
 
-// (Los sub-componentes TabDeudores, TabProveedores y ModalMovimiento quedan exactamente iguales a como los tenías)
 
 // ============================================================================
-// SUB-COMPONENTE 2: DEUDORES (WhatsApp Dinámico)
+// SUB-COMPONENTE 2: DEUDORES (Con Cerebro Automático)
 // ============================================================================
 function TabDeudores() {
   const [listaDeudores, setListaDeudores] = useState<any[]>([])
@@ -194,19 +195,64 @@ function TabDeudores() {
   const supabase = createClient()
 
   useEffect(() => {
-    const fetchDeudores = async () => {
-      // Usamos el operador ->> para extraer el valor como texto y filtrar
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('id, nombre, telefono, datos_flexibles')
-        .or('datos_flexibles->>estado_cuota.eq.vencida,datos_flexibles->>estado_cuota.eq.deuda')
+    const fetchDeudoresInteligente = async () => {
+      try {
+        const hoy = new Date()
+        const anioActual = hoy.getFullYear()
+        const mesActual = hoy.getMonth()
+        
+        // 1. Traemos la lista de todas las alumnas y los pagos completos
+        const [resUsuarios, resPagos] = await Promise.all([
+          supabase.from('usuarios').select('id, nombre, telefono, datos_flexibles, titular_id, rol').eq('activa', true),
+          supabase.from('pagos').select('alumno_id, concepto_categoria, fecha')
+        ])
+        
+        const usu = resUsuarios.data || []
+        const pag = resPagos.data || []
+        const morososList: any[] = []
 
-      if (data) {
-        setListaDeudores(data)
+        // 2. Evaluamos una por una con el Cerebro Automático
+        usu.forEach((u: any) => {
+          if (u.rol === "admin") return // Saltamos a los administradores
+          
+          let flex: any = {}
+          try { flex = typeof u.datos_flexibles === 'string' ? JSON.parse(u.datos_flexibles) : (u.datos_flexibles || {}) } catch (e) {}
+
+          const pagosHistorialTotal = pag.filter(p => p.alumno_id === u.id || (u.titular_id && p.alumno_id === u.titular_id))
+          
+          let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
+          if (u.titular_id) {
+            const tutor = usu.find((t: any) => t.id === u.titular_id)
+            if (tutor?.datos_flexibles) {
+              const tFlex = typeof tutor.datos_flexibles === 'string' ? JSON.parse(tutor.datos_flexibles) : tutor.datos_flexibles
+              if (tFlex?.dia_vencimiento) diaVencimiento = parseInt(tFlex.dia_vencimiento)
+            }
+          }
+
+          const tienePagoEsteMes = pagosHistorialTotal.some((p: any) => {
+            const f = new Date(p.fecha)
+            return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
+          })
+
+          let estaAlDia = false
+          if (pagosHistorialTotal.length === 0) estaAlDia = false
+          else if (tienePagoEsteMes) estaAlDia = true
+          else estaAlDia = hoy.getDate() <= diaVencimiento
+
+          if (!estaAlDia) {
+            morososList.push(u)
+          }
+        })
+
+        setListaDeudores(morososList)
+      } catch (e) {
+        console.error("Error evaluando deudores", e)
+      } finally {
+        setCargando(false)
       }
-      setCargando(false)
     }
-    fetchDeudores()
+    
+    fetchDeudoresInteligente()
   }, [])
 
   if (cargando) return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>
@@ -220,11 +266,11 @@ function TabDeudores() {
         </div>
         <div className="divide-y divide-border">
           {listaDeudores.length === 0 ? (
-            <p className="p-8 text-center text-muted-foreground italic">¡No hay deudores registrados!</p>
+            <p className="p-8 text-center text-muted-foreground italic font-medium">¡Excelente! No hay morosos registrados este mes.</p>
           ) : (
             listaDeudores.map((deuda) => {
               const telLimpio = deuda.telefono ? deuda.telefono.replace(/\D/g, '') : "";
-              const mensaje = `Hola ${deuda.nombre.split(' ')[0]}, te escribimos desde ${"tu academia"}. Te recordamos que tenés una cuota pendiente. ¡Avisanos cuando realices el pago!`;
+              const mensaje = `Hola ${deuda.nombre.split(' ')[0]}, te escribimos desde administración. Te recordamos que tenés una cuota pendiente. ¡Avisanos cuando realices el pago!`;
               const linkWhatsApp = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensaje)}`;
 
               return (
@@ -255,7 +301,7 @@ function TabDeudores() {
 }
 
 // ============================================================================
-// SUB-COMPONENTE 3: PROVEEDORES Y GASTOS FIJOS (Con Mes en PDF)
+// SUB-COMPONENTE 3: PROVEEDORES Y GASTOS FIJOS 
 // ============================================================================
 function TabProveedores({ onAgregarEgreso }: { onAgregarEgreso: (mov: any) => void }) {
   const generarMeses = () => {
@@ -295,7 +341,6 @@ function TabProveedores({ onAgregarEgreso }: { onAgregarEgreso: (mov: any) => vo
   }, [proveedores])
 
   const proveedoresDelMes = proveedores.filter(p => p.mes === mesSeleccionado)
-  // Obtenemos el nombre del mes seleccionado para mostrarlo en el PDF
   const nombreMesPDF = opcionesMeses.find(m => m.value === mesSeleccionado)?.label
 
   const handleAgregarGasto = (e: React.FormEvent) => {
@@ -350,7 +395,6 @@ function TabProveedores({ onAgregarEgreso }: { onAgregarEgreso: (mov: any) => vo
             <Calendar className="h-6 w-6 text-primary" />
             <div>
               <h3 className="font-black text-lg uppercase tracking-tight">Control Mensual</h3>
-              {/* MAGIA: Este texto solo aparece en la hoja impresa */}
               <p className="hidden print:block text-sm font-bold text-muted-foreground capitalize">
                 Período: {nombreMesPDF}
               </p>
@@ -445,10 +489,9 @@ function TabProveedores({ onAgregarEgreso }: { onAgregarEgreso: (mov: any) => vo
 }
 
 // ============================================================================
-// SUB-COMPONENTE 4: MODAL DE NUEVO MOVIMIENTO (Aislado para evitar lag)
+// SUB-COMPONENTE 4: MODAL DE NUEVO MOVIMIENTO
 // ============================================================================
 function ModalMovimiento({ tipo, alCerrar, alGuardar }: { tipo: 'ingreso'|'egreso', alCerrar: () => void, alGuardar: (mov: any) => void }) {
-  // Al estar este estado aislado acá, cuando tipeás NO recarga la página entera, solo este cuadradito.
   const [formData, setFormData] = useState({ descripcion: '', monto: '', metodo: 'Mercado Pago' })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -481,7 +524,7 @@ function ModalMovimiento({ tipo, alCerrar, alGuardar }: { tipo: 'ingreso'|'egres
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Concepto</label>
-            <input type="text" required value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} className="w-full bg-background border border-border rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary outline-none" />
+            <input type="text" required placeholder="Ej: Sponsor, Venta Ropa..." value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} className="w-full bg-background border border-border rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary outline-none" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Método</label>

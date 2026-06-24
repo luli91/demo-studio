@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { 
   ArrowLeft, Wallet, CheckCircle2, AlertCircle, 
-  ReceiptText, Banknote, FileText, Download, UploadCloud, Loader2, Trash2
+  ReceiptText, Banknote, FileText, Download, UploadCloud, Loader2, Trash2, CalendarDays
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,9 +38,14 @@ export default function FichaAlumno({
   const [subiendoDoc, setSubiendoDoc] = useState(false)
   const [borrandoDoc, setBorrandoDoc] = useState<string | null>(null)
 
+  // Estados para la Edición de Vencimiento
+  const flex = alumno.datos_flexibles || {}
+  const [editandoVencimiento, setEditandoVencimiento] = useState(false)
+  const [nuevoVencimiento, setNuevoVencimiento] = useState<number>(flex.dia_vencimiento ? Number(flex.dia_vencimiento) : 10)
+  const [guardandoVencimiento, setGuardandoVencimiento] = useState(false)
+
   const esMenor = Boolean(alumno.titular_id)
   const esTutor = alumno.entrena === false
-  const flex = alumno.datos_flexibles || {}
   const direccionArmada = [flex.calle, flex.numero_calle, flex.barrio_localidad, flex.provincia].filter(Boolean).join(", ")
 
   const handleSubirFotoAdmin = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,7 +69,6 @@ export default function FichaAlumno({
     }
   }
 
-  // --- NUEVA LÓGICA DE LEGAJO PARA ADMIN ---
   const handleSubirLegajo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (!e.target.files || e.target.files.length === 0) return
@@ -85,7 +89,7 @@ export default function FichaAlumno({
 
       await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
       toast.success("Documento adjuntado correctamente.")
-      onSubirArchivo() // Refresca la BD en page.tsx
+      onSubirArchivo()
     } catch (error: any) {
       toast.error("Error al subir el archivo.")
     } finally {
@@ -106,7 +110,7 @@ export default function FichaAlumno({
 
       await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
       toast.success("Documento eliminado.")
-      onSubirArchivo() // Refresca la BD en page.tsx
+      onSubirArchivo()
     } catch (error: any) {
       toast.error("Error al eliminar el documento.")
     } finally {
@@ -114,9 +118,45 @@ export default function FichaAlumno({
     }
   }
 
+  // --- LÓGICA DE ACTUALIZACIÓN DEL VENCIMIENTO FAMILIAR ---
+  const handleGuardarVencimiento = async () => {
+    try {
+      setGuardandoVencimiento(true)
+      
+      // 1. Guardamos al titular actual
+      const nuevosFlex = { ...flex, dia_vencimiento: nuevoVencimiento }
+      const { error: err1 } = await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
+      if (err1) throw err1
+
+      // 2. Si no es menor, buscamos si tiene hijos/as a cargo y les cambiamos el día también
+      if (!esMenor) {
+        const { data: hijos } = await supabase.from('usuarios').select('id, datos_flexibles').eq('titular_id', alumno.id)
+        if (hijos && hijos.length > 0) {
+          for (const hijo of hijos) {
+            let flexHijo = typeof hijo.datos_flexibles === 'string' ? JSON.parse(hijo.datos_flexibles) : (hijo.datos_flexibles || {})
+            flexHijo.dia_vencimiento = nuevoVencimiento
+            await supabase.from('usuarios').update({ datos_flexibles: flexHijo }).eq('id', hijo.id)
+          }
+          toast.success(`Día actualizado para titular y sus ${hijos.length} menores.`)
+        } else {
+          toast.success("Día de vencimiento actualizado.")
+        }
+      } else {
+        toast.success("Día de vencimiento actualizado.")
+      }
+
+      setEditandoVencimiento(false)
+      onSubirArchivo() // Refresca la UI
+    } catch (error: any) {
+      toast.error("Error al actualizar la fecha: " + error.message)
+    } finally {
+      setGuardandoVencimiento(false)
+    }
+  }
+
   return (
     <div className="space-y-6 animate-in slide-in-from-right-2">
-      <Button variant="outline" onClick={onVolver} className="bg-card rounded-xl shadow-sm border-border">
+      <Button variant="outline" onClick={onVolver} className="bg-card rounded-xl shadow-sm border-border font-bold">
         <ArrowLeft className="h-4 w-4 mr-2" /> Volver al Directorio
       </Button>
 
@@ -205,22 +245,80 @@ export default function FichaAlumno({
         {/* PESTAÑA 3: ESTADO DE CUENTA */}
         {pestaña === 'finanzas' && (
           <div className="max-w-4xl mx-auto space-y-6 w-full animate-in fade-in">
-            <Card className={`border-2 shadow-md bg-card rounded-[2.5rem] overflow-hidden ${flex.estado_cuota === 'al_dia' ? 'border-border' : 'border-destructive/40'}`}>
-              <div className={`p-6 border-b flex items-center gap-3 ${flex.estado_cuota === 'al_dia' ? 'bg-secondary/10 border-border' : 'bg-destructive/10 border-destructive/20 text-destructive'}`}><Wallet className="h-6 w-6" /><h3 className="text-xl font-black uppercase tracking-tighter italic">Situación Financiera</h3></div>
-              <CardContent className="p-8 flex flex-col md:flex-row justify-between items-center gap-6">
-                {modeloNegocio === 'reservas' ? (
-                  <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Créditos ({alumno.nombre})</p><p className="text-7xl font-black text-primary">{flex.creditos_clases || 0}</p></div>
+            <Card className={`border-2 shadow-md bg-card rounded-[2.5rem] overflow-hidden ${alumno.estado_cuota === 'al_dia' ? 'border-border' : 'border-destructive/40'}`}>
+             <div className={`p-6 border-b flex items-center gap-3 ${alumno.estado_cuota === 'al_dia' ? 'bg-secondary/10 border-border' : 'bg-destructive/10 border-destructive/20 text-destructive'}`}>
+                <Wallet className="h-6 w-6" />
+                <h3 className="text-xl font-black uppercase tracking-tighter italic">Situación Financiera</h3>
+              </div>
+              <CardContent className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                
+                {/* COLUMNA IZQUIERDA: ESTADO Y VENCIMIENTO */}
+                <div className="flex flex-col gap-5 w-full md:w-auto">
+                  {modeloNegocio === 'reservas' ? (
+                    <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Créditos ({alumno.nombre})</p><p className="text-7xl font-black text-primary">{alumno.creditos_clases || 0}</p></div>
+                  ) : (
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Membresía</p>
+                      {alumno.estado_cuota === 'al_dia' ? (
+                        <div className="flex items-center gap-3"><CheckCircle2 className="h-12 w-12 text-emerald-500" /><p className="text-3xl font-black text-foreground uppercase tracking-tight">Al Día</p></div>
+                      ) : (
+                        <div className="flex items-center gap-3"><AlertCircle className="h-12 w-12 text-destructive animate-pulse" /><p className="text-3xl font-black text-destructive uppercase tracking-tight">Vencida</p></div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* NUEVO MÓDULO: CONFIGURACIÓN DE DÍA DE VENCIMIENTO */}
+                  {modeloNegocio === 'mensual' && (
+                    <div className="p-4 bg-secondary/30 rounded-2xl border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
+                      <div className="flex items-start gap-3">
+                        <CalendarDays className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vencimiento Personalizado</p>
+                          {!editandoVencimiento ? (
+                            <p className="text-sm font-black text-foreground mt-0.5">
+                              Día {flex.dia_vencimiento || 10} de cada mes
+                            </p>
+                          ) : (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs font-bold text-muted-foreground">Día</span>
+                              <input 
+                                type="number" 
+                                min="1" max="31" 
+                                value={nuevoVencimiento} 
+                                onChange={(e) => setNuevoVencimiento(Number(e.target.value))}
+                                className="w-16 h-8 text-center font-bold bg-background border border-border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        {!editandoVencimiento ? (
+                          <Button variant="outline" size="sm" onClick={() => setEditandoVencimiento(true)} className="h-8 text-xs font-bold border-border shadow-sm">Editar</Button>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => { setEditandoVencimiento(false); setNuevoVencimiento(flex.dia_vencimiento || 10); }} disabled={guardandoVencimiento} className="h-8 text-xs">Cancelar</Button>
+                            <Button size="sm" onClick={handleGuardarVencimiento} disabled={guardandoVencimiento} className="h-8 text-xs font-bold bg-primary text-white shadow-sm">
+                              {guardandoVencimiento ? <Loader2 className="h-3 w-3 animate-spin" /> : "Guardar"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* COLUMNA DERECHA: BOTÓN DE COBRO */}
+                {!esMenor ? (
+                  <Button onClick={onAbrirCobro} className="bg-primary hover:bg-primary/90 font-black uppercase tracking-widest rounded-xl h-14 px-8 shadow-lg w-full md:w-auto shrink-0">
+                    Registrar Cobro
+                  </Button>
                 ) : (
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Membresía</p>
-                    {flex.estado_cuota === 'al_dia' ? (
-                      <div className="flex items-center gap-3"><CheckCircle2 className="h-12 w-12 text-emerald-500" /><p className="text-3xl font-black text-foreground uppercase tracking-tight">Al Día</p></div>
-                    ) : (
-                      <div className="flex items-center gap-3"><AlertCircle className="h-12 w-12 text-destructive animate-pulse" /><p className="text-3xl font-black text-destructive uppercase tracking-tight">Vencida</p></div>
-                    )}
-                  </div>
+                  <p className="text-[10px] font-black uppercase text-muted-foreground max-w-xs text-left md:text-right bg-secondary/20 p-4 rounded-xl border border-border">
+                    Los pagos de los menores se gestionan desde la ficha del adulto responsable.
+                  </p>
                 )}
-                {!esMenor ? <Button onClick={onAbrirCobro} className="bg-primary hover:bg-primary/90 font-black uppercase tracking-widest rounded-xl h-14 px-8 shadow-lg w-full md:w-auto">Registrar Cobro</Button> : <p className="text-[10px] font-black uppercase text-muted-foreground max-w-xs text-right">Los pagos de los menores se gestionan desde la ficha del adulto responsable.</p>}
               </CardContent>
             </Card>
             

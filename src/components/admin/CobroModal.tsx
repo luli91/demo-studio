@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Wallet, CheckCircle2, Loader2 } from "lucide-react"
+import { Wallet, CheckCircle2, Loader2, CalendarRange } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -10,11 +10,18 @@ interface CobroModalProps {
   familia: any[]
   modeloNegocio: string
   onClose: () => void
-  onCobrar: (datos: { monto: number, observaciones: string, creditos: number, alumnosAPagar: string[], concepto: string }) => any
+  onCobrar: (datos: { monto: number, observaciones: string, creditos: number, alumnosAPagar: string[], concepto: string, mesImputado?: string }) => any
 }
 
+// Generamos los meses para el selector
+const MESES = [
+  { id: '1', nombre: 'Enero' }, { id: '2', nombre: 'Febrero' }, { id: '3', nombre: 'Marzo' },
+  { id: '4', nombre: 'Abril' }, { id: '5', nombre: 'Mayo' }, { id: '6', nombre: 'Junio' },
+  { id: '7', nombre: 'Julio' }, { id: '8', nombre: 'Agosto' }, { id: '9', nombre: 'Septiembre' },
+  { id: '10', nombre: 'Octubre' }, { id: '11', nombre: 'Noviembre' }, { id: '12', nombre: 'Diciembre' }
+]
+
 export default function CobroModal({ abierto, familia, modeloNegocio, onClose, onCobrar }: CobroModalProps) {
-  // Estado para bloquear el botón y evitar el doble envío
   const [procesando, setProcesando] = useState(false)
 
   const [alumnosAPagar, setAlumnosAPagar] = useState<string[]>(() => {
@@ -25,11 +32,15 @@ export default function CobroModal({ abierto, familia, modeloNegocio, onClose, o
   })
   
   const [conceptoSeleccionado, setConceptoSeleccionado] = useState<string>("CUOTA")
+  
+  // Nuevo estado: Seleccionar el mes (por defecto el mes actual)
+  const mesActualId = String(new Date().getMonth() + 1)
+  const [mesSeleccionado, setMesSeleccionado] = useState<string>(mesActualId)
 
   if (!abierto) return null
 
   const toggleCheckAlumno = (id: string) => {
-    if (procesando) return // Bloqueamos interacción si está guardando
+    if (procesando) return
     if (alumnosAPagar.includes(id)) {
       setAlumnosAPagar(alumnosAPagar.filter(a => a !== id))
     } else {
@@ -39,21 +50,41 @@ export default function CobroModal({ abierto, familia, modeloNegocio, onClose, o
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (procesando) return // Doble seguridad
+    if (procesando) return 
     
-    setProcesando(true) // ⚡ Congelamos el modal de inmediato
+    setProcesando(true)
 
     try {
       const formData = new FormData(e.currentTarget)
       const monto = parseInt(formData.get('monto') as string)
-      const observaciones = formData.get('observaciones') as string || conceptoSeleccionado
+      const observacionesManuales = formData.get('observaciones') as string
       const creditos = modeloNegocio === 'reservas' ? parseInt(formData.get('creditos') as string) : 0
 
-      // Ejecutamos la función de cobro esperando a que termine la inserción en Supabase
-      await onCobrar({ monto, observaciones, creditos, alumnosAPagar, concepto: conceptoSeleccionado })
+      // Armamos la observación final (Si es cuota, le pega el nombre del mes)
+      let observacionesFinales = observacionesManuales
+      let mesImputado = undefined
+
+      if (conceptoSeleccionado === "CUOTA") {
+        const nombreDelMes = MESES.find(m => m.id === mesSeleccionado)?.nombre
+        if (!observacionesFinales) {
+          observacionesFinales = `Mes de ${nombreDelMes}`
+        }
+        mesImputado = mesSeleccionado
+      } else {
+        if (!observacionesFinales) observacionesFinales = conceptoSeleccionado
+      }
+
+      await onCobrar({ 
+        monto, 
+        observaciones: observacionesFinales, 
+        creditos, 
+        alumnosAPagar, 
+        concepto: conceptoSeleccionado,
+        mesImputado 
+      })
     } catch (error) {
       console.error("Error al emitir cobro:", error)
-      setProcesando(false) // Si falla, liberamos el botón para reintentar
+      setProcesando(false)
     }
   }
 
@@ -106,13 +137,31 @@ export default function CobroModal({ abierto, familia, modeloNegocio, onClose, o
                   key={concepto} 
                   disabled={procesando}
                   onClick={() => setConceptoSeleccionado(concepto)}
-                  className={`p-2 border rounded-lg text-center cursor-pointer text-xs font-bold uppercase transition-colors ${conceptoSeleccionado === concepto ? 'bg-primary text-white border-primary' : 'bg-background hover:bg-secondary/50'}`}
+                  className={`p-2 border rounded-lg text-center cursor-pointer text-xs font-bold uppercase transition-colors ${conceptoSeleccionado === concepto ? 'bg-primary text-white border-primary shadow-sm' : 'bg-background hover:bg-secondary/50'}`}
                 >
                   {concepto}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* NUEVO: SELECTOR DE MES (Solo aparece si es CUOTA) */}
+          {conceptoSeleccionado === "CUOTA" && (
+            <div className="space-y-1 p-4 bg-amber-50 border border-amber-100 rounded-xl animate-in zoom-in-95 duration-200">
+              <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
+                <CalendarRange className="h-3 w-3" /> Mes a Imputar
+              </label>
+              <select 
+                value={mesSeleccionado}
+                onChange={(e) => setMesSeleccionado(e.target.value)}
+                className="w-full h-11 bg-white border border-amber-200 rounded-lg px-3 font-bold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 mt-1"
+              >
+                {MESES.map(m => (
+                  <option key={m.id} value={m.id}>{m.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Monto Total a cobrar ($)</label>
@@ -128,20 +177,20 @@ export default function CobroModal({ abierto, familia, modeloNegocio, onClose, o
 
           <div className="space-y-1">
             <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Detalle (Opcional)</label>
-            <Input name="observaciones" type="text" disabled={procesando} placeholder="Ej: Mes Abril" className="h-12 rounded-xl border-border bg-background" />
+            <Input name="observaciones" type="text" disabled={procesando} placeholder="Escribí un detalle extra si querés..." className="h-12 rounded-xl border-border bg-background" />
           </div>
 
           <div className="flex gap-2 pt-2">
             <Button type="button" onClick={onClose} disabled={procesando} variant="outline" className="flex-1 rounded-xl h-12 font-bold text-muted-foreground">Cancelar</Button>
             <Button 
               type="submit" 
-              disabled={procesando} // ⚡ Se apaga físicamente al hacer click
+              disabled={procesando} 
               className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-12 font-black uppercase tracking-widest shadow-md transition-all"
             >
               {procesando ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Procesando...</span>
+                  <span>Guardando...</span>
                 </div>
               ) : (
                 "Emitir Recibo"

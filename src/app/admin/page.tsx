@@ -2,361 +2,366 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase"
-import { Users, TrendingUp, MapPin, CalendarHeart, Flame, ArrowUpRight, DollarSign, Loader2, UserMinus, Clock, AlertCircle, Sparkles, BarChart3 } from "lucide-react"
+import { 
+  Users, DollarSign, Loader2, UserMinus, UserCheck, 
+  PlusCircle, MinusCircle, 
+  AlertCircle, MessageCircle, Receipt, 
+  StickyNote, Calendar, CheckCircle2, Circle, 
+  Trash2, Clock4, X, ArrowUpRight
+} from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
-// ========================================================
-// 🎭 DICCIONARIO SAAS: Adaptación para distintos clientes
-// ========================================================
-const DICCIONARIO = {
-  mensual: {
-    pluralSujetos: "Jugadoras",
-    actividadPopular: "Categoría Estrella",
-    accionSecundaria: "Entrenamientos Próximos",
-    textoCancelacion: "No aplica a cuotas mensuales",
-    alertasIA: "cuotas impagas"
-  },
-  reservas: {
-    pluralSujetos: "Alumnas",
-    actividadPopular: "Disciplina Estrella",
-    accionSecundaria: "Reservas Próximas",
-    textoCancelacion: "Cupos liberados",
-    alertasIA: "paquetes por vencer"
-  }
-}
+const ETIQUETAS = [
+  { id: "Administrativo", color: "bg-blue-100 text-blue-700" },
+  { id: "Urgente", color: "bg-red-100 text-red-700" },
+  { id: "Cumpleaños", color: "bg-fuchsia-100 text-fuchsia-700" },
+  { id: "Cobro", color: "bg-emerald-100 text-emerald-700" },
+  { id: "Personal", color: "bg-slate-100 text-slate-700" },
+]
 
 export default function AdminDashboardMainPage() {
   const supabase = createClient()
   
-  // ⚠️ SIMULADOR DE NEGOCIO (Cambialo para ver cómo la interfaz y la IA mutan solas)
-  const modeloNegocio: string = "mensual" 
-  const textos = DICCIONARIO[modeloNegocio as keyof typeof DICCIONARIO]
-
   const [metricas, setMetricas] = useState({
-    recaudacion: 0,
-    alumnasNuevas: 0,
-    totalAlumnas: 0,
-    porcentajeCrecimiento: 0,
-    reservasProximas: 0,
-    claseEstrella: "Cargando...", 
-    totalReservasEstrella: 0,     
-    rankingDisciplinas: [] as { nombre: string, cantidad: number, porcentajeBarra: number }[],
-    actividadReciente: [] as any[]
+    recaudacionMes: 0,
+    totalAlumnasActivas: 0,
+    alumnasAlDia: 0,
+    alumnasEnMora: 0,
+    listaDeudores: [] as any[],
+    ultimosPagos: [] as any[]
   })
-  const [barrios, setBarrios] = useState<{nombre: string, porcentaje: number}[]>([])
+  
   const [cargando, setCargando] = useState(true)
+  const [tareas, setTareas] = useState<any[]>([])
+  const [modalTareaVisible, setModalTareaVisible] = useState(false)
+  const [nuevaTarea, setNuevaTarea] = useState({ texto: "", fecha: "", etiqueta: "Administrativo" })
+  const [modalPosponerVisible, setModalPosponerVisible] = useState(false)
+  const [tareaIdPosponer, setTareaIdPosponer] = useState<string | null>(null)
+  const [fechaPosponer, setFechaPosponer] = useState("")
+
+  const hoy = new Date()
+  const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
 
   useEffect(() => {
-    const cargarDashboard = async () => {
-      const ahora = new Date()
-      const año = ahora.getFullYear()
-      const mesJS = ahora.getMonth()
-      const dia = ahora.getDate()
-      
-      const mesStr = String(mesJS + 1).padStart(2, '0')
-      const diaStr = String(dia).padStart(2, '0')
-      const inicioMesActualString = `${año}-${mesStr}-01`
-      
-      const fechaInicioMes = new Date(año, mesJS, 1).getTime()
-      const fechaInicioMesPasado = new Date(mesJS === 0 ? año - 1 : año, mesJS === 0 ? 11 : mesJS - 1, 1).getTime()
-      
-      const hoyLocalStr = `${año}-${mesStr}-${diaStr}`
-      const pasadoMañana = new Date(ahora)
-      pasadoMañana.setDate(dia + 2)
-      const limite48hsStr = `${pasadoMañana.getFullYear()}-${String(pasadoMañana.getMonth() + 1).padStart(2, '0')}-${String(pasadoMañana.getDate()).padStart(2, '0')}`
+    setNuevaTarea(prev => ({ ...prev, fecha: hoyStr }))
 
-      const [resPagos, resAlumnas, resReservasProx, resTodasReservas, resActividad] = await Promise.all([
-        supabase.from("pagos").select("monto").gte("fecha", inicioMesActualString),
-        supabase.from("perfiles").select("id, created_at, barrio_localidad").eq("rol", "alumna"),
-        supabase.from("reservas").select("id").eq("estado", "confirmada").gte("fecha_clase", hoyLocalStr).lte("fecha_clase", limite48hsStr),
-        supabase.from("reservas").select(`id, clases ( nivel )`).eq("estado", "confirmada"),
-        supabase.from("reservas").select("id, estado, fecha_clase, perfiles(nombre, apellido), clases(nivel, horario)")
-          .eq("estado", "cancelada").gte("fecha_clase", hoyLocalStr).lte("fecha_clase", limite48hsStr).order("fecha_clase", { ascending: true }).limit(8)
-      ])
-      
-      const alumnas = resAlumnas.data || []
-      const totalAlumnasCount = alumnas.length 
-      
-      let nuevasEsteMes = 0
-      let nuevasMesPasado = 0
-      
-      alumnas.forEach(alumna => {
-        if (!alumna.created_at) return 
-        const fechaRegistro = new Date(alumna.created_at).getTime()
-        if (fechaRegistro >= fechaInicioMes) {
-          nuevasEsteMes++
-        } else if (fechaRegistro >= fechaInicioMesPasado && fechaRegistro < fechaInicioMes) {
-          nuevasMesPasado++
+    const cargarDashboardYDB = async () => {
+      try {
+        // Traemos TODOS los pagos de la BD para poder calcular el historial total (alumnos nuevos)
+        const [resPagos, resUsuarios, resTareas] = await Promise.all([
+          supabase.from("pagos").select("monto, fecha, beneficiario, concepto_categoria, alumno_id").order("fecha", { ascending: false }),
+          supabase.from("usuarios").select("id, nombre, telefono, created_at, activa, datos_flexibles, titular_id, rol").eq("activa", true),
+          supabase.from("tareas").select("*")
+        ])
+        
+        const usuarios = resUsuarios.data || []
+        const todosLosPagos = resPagos.data || []
+        
+        if (resTareas.data) {
+          setTareas(resTareas.data)
         }
-      })
-      
-      let crecimiento = 0
-      if (nuevasMesPasado === 0 && nuevasEsteMes > 0) crecimiento = 100 
-      else if (nuevasMesPasado > 0) crecimiento = Math.round(((nuevasEsteMes - nuevasMesPasado) / nuevasMesPasado) * 100)
 
-      const conteoBarrios: Record<string, number> = {}
-      let alumnasConBarrio = 0
-      alumnas.forEach(p => {
-        const barrio = p.barrio_localidad ? p.barrio_localidad.trim() : ""
-        if (barrio) { conteoBarrios[barrio] = (conteoBarrios[barrio] || 0) + 1; alumnasConBarrio++ }
-      })
+        // CORRECCIÓN: Declaramos las variables correctamente dentro de la carga asíncrona
+        let alDiaCount = 0
+        let enMoraCount = 0
+        const morososList: any[] = []
+        
+        const diaActual = hoy.getDate()
+        const mesActual = hoy.getMonth()
+        const anioActual = hoy.getFullYear()
 
-      const barriosFormateados = Object.entries(conteoBarrios)
-        .map(([nombre, cantidad]) => ({ nombre, porcentaje: Math.round((cantidad / (alumnasConBarrio || 1)) * 100) }))
-        .sort((a, b) => b.porcentaje - a.porcentaje).slice(0, 5)
+        // Filtramos en memoria los pagos correspondientes al mes corriente para las KPIs de recaudación
+        const pagosDelMes = todosLosPagos.filter((p: any) => {
+          const f = new Date(p.fecha)
+          return f.getMonth() === mesActual && f.getFullYear() === anioActual
+        })
 
-      const conteoDisciplinas: Record<string, number> = {}
-      resTodasReservas.data?.forEach((r: any) => {
-        const nombre = r.clases?.nivel || "Sin nombre"
-        conteoDisciplinas[nombre] = (conteoDisciplinas[nombre] || 0) + 1
-      })
+        usuarios.forEach((u: any) => {
+          // El Dashboard solo debe calcular cuentas de alumnos, salteamos administradores
+          if (u.rol === "admin") return
 
-      const rankingOrdenado = Object.entries(conteoDisciplinas)
-        .map(([nombre, cantidad]) => ({ nombre, cantidad, porcentajeBarra: Math.min(Math.round((cantidad / 15) * 100), 100) }))
-        .sort((a, b) => b.cantidad - a.cantidad)
+          let flex: any = {}
+          try {
+            flex = typeof u.datos_flexibles === 'string' ? JSON.parse(u.datos_flexibles) : (u.datos_flexibles || {})
+          } catch (e) {}
 
-      const ganadora = rankingOrdenado[0]
+          // Buscamos los pagos históricos totales vinculados al alumno (o a su tutor si es menor)
+          const pagosHistorialTotal = todosLosPagos.filter(p => p.alumno_id === u.id || (u.titular_id && p.alumno_id === u.titular_id))
+          
+          // Buscamos su día de vencimiento (si es menor, hereda el del tutor para mantener sincronismo familiar)
+          let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
+          if (u.titular_id) {
+            const tutor = usuarios.find((t: any) => t.id === u.titular_id)
+            if (tutor?.datos_flexibles) {
+              const tutorFlex = typeof tutor.datos_flexibles === 'string' ? JSON.parse(tutor.datos_flexibles) : tutor.datos_flexibles
+              if (tutorFlex?.dia_vencimiento) {
+                diaVencimiento = parseInt(tutorFlex.dia_vencimiento)
+              }
+            }
+          }
 
-      setMetricas({
-        recaudacion: resPagos.data?.reduce((sum, p) => sum + Number(p.monto), 0) || 0,
-        alumnasNuevas: nuevasEsteMes,
-        totalAlumnas: totalAlumnasCount,
-        porcentajeCrecimiento: crecimiento,
-        reservasProximas: resReservasProx.data?.length || 0,
-        claseEstrella: ganadora?.nombre || "Sin actividad",
-        totalReservasEstrella: ganadora?.cantidad || 0,
-        rankingDisciplinas: rankingOrdenado.slice(0, 5),
-        actividadReciente: resActividad.data || []
-      })
-      setBarrios(barriosFormateados)
-      setCargando(false)
+          // Verificamos si tiene registrada una 'CUOTA' este mes
+          const tienePagoEsteMes = pagosHistorialTotal.some((p: any) => {
+            const f = new Date(p.fecha)
+            return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
+          })
+
+          let estaAlDia = false
+
+          // APLICACIÓN DE LA REGLA DE HISTORIAL:
+          if (pagosHistorialTotal.length === 0) {
+            estaAlDia = false // Alumno nuevo sin historial de pagos entra de inmediato como deudor
+          } else if (tienePagoEsteMes) {
+            estaAlDia = true  // Ya pagó la cuota mensual
+          } else {
+            estaAlDia = diaActual <= diaVencimiento // No pagó aún, evaluamos período de gracia
+          }
+
+          if (estaAlDia) {
+            alDiaCount++
+          } else {
+            enMoraCount++
+            morososList.push({
+              id: u.id,
+              nombre: u.nombre,
+              telefono: u.telefono,
+              detalle: pagosHistorialTotal.length === 0 
+                ? "Ingreso Nuevo • Matrícula/Cuota Pendiente" 
+                : `Vencido el ${diaVencimiento} • ${flex.clase_asignada || "Cuota Mensual"}`
+            })
+          }
+        })
+
+        const totalRecaudado = pagosDelMes.reduce((sum, p) => sum + Number(p.monto || 0), 0)
+
+        setMetricas({
+          recaudacionMes: totalRecaudado,
+          totalAlumnasActivas: usuarios.filter(usr => usr.rol !== "admin").length,
+          alumnasAlDia: alDiaCount,
+          alumnasEnMora: enMoraCount,
+          listaDeudores: morososList,
+          ultimosPagos: pagosDelMes.slice(0, 5)
+        })
+
+      } catch (error) {
+        console.error("Error al sincronizar el tablero:", error)
+      } finally {
+        setCargando(false)
+      }
     }
 
-    cargarDashboard()
+    cargarDashboardYDB()
   }, [supabase])
+
+  // --- FUNCIONES DE TAREAS ---
+  const handleAgregarTarea = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nuevaTarea.texto.trim()) return
+    setModalTareaVisible(false)
+    const { data, error } = await supabase.from('tareas').insert([{ texto: nuevaTarea.texto, fecha: nuevaTarea.fecha, etiqueta: nuevaTarea.etiqueta, completada: false }]).select().single()
+    if (!error && data) setTareas(prev => [...prev, data])
+    setNuevaTarea({ texto: "", fecha: hoyStr, etiqueta: "Administrativo" })
+  }
+
+  const toggleTarea = async (id: string) => {
+    const tarea = tareas.find(t => t.id === id)
+    if (!tarea) return
+    const nuevoEstado = !tarea.completada
+    setTareas(tareas.map(t => t.id === id ? { ...t, completada: nuevoEstado } : t))
+    await supabase.from('tareas').update({ completada: nuevoEstado }).eq('id', id)
+  }
+
+  const eliminarTarea = async (id: string) => {
+    setTareas(tareas.filter(t => t.id !== id))
+    await supabase.from('tareas').delete().eq('id', id)
+  }
+
+  const iniciarPosponer = (id: string) => {
+    setTareaIdPosponer(id)
+    const mañana = new Date(); mañana.setDate(mañana.getDate() + 1)
+    setFechaPosponer(`${mañana.getFullYear()}-${String(mañana.getMonth() + 1).padStart(2, '0')}-${String(mañana.getDate()).padStart(2, '0')}`)
+    setModalPosponerVisible(true)
+  }
+
+  const confirmarPosponer = async (e: React.FormEvent) => {
+    e.preventDefault(); if (!tareaIdPosponer || !fechaPosponer) return
+    setTareas(tareas.map(t => t.id === tareaIdPosponer ? { ...t, fecha: fechaPosponer } : t))
+    const idA = tareaIdPosponer; const nF = fechaPosponer
+    setModalPosponerVisible(false); setTareaIdPosponer(null)
+    await supabase.from('tareas').update({ fecha: nF }).eq('id', idA)
+  }
+
+  const tareasVisibles = tareas
+    .filter(t => t.fecha <= hoyStr || (t.completada && t.fecha === hoyStr))
+    .sort((a, b) => {
+      if (a.completada === b.completada) return new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+      return a.completada ? 1 : -1
+    })
 
   if (cargando) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>
 
   return (
-    <div className="space-y-8 animate-in fade-in pb-12">
-      <div>
-        <h1 className="text-3xl font-black text-foreground uppercase tracking-tight italic">Centro de Comando</h1>
-        <p className="text-muted-foreground mt-1 font-medium">Datos en tiempo real extraídos de tu base operativa.</p>
-      </div>
-
-      {/* 🧠 ASESOR VIRTUAL IA (Lee los datos reales de arriba para dar consejos) */}
-      <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-[2px] rounded-3xl shadow-lg">
-        <div className="bg-card rounded-[23px] p-6 sm:p-8 flex flex-col md:flex-row gap-6 items-center md:items-start">
-          <div className="p-4 bg-primary/10 rounded-2xl shrink-0">
-            <Sparkles className="h-10 w-10 text-primary animate-pulse" />
-          </div>
-          <div className="flex-1 space-y-4">
-            <div>
-              <h2 className="text-xl font-black flex items-center gap-2">
-                Asistente Financiero IA <span className="text-[10px] bg-primary text-primary-foreground px-2 py-0.5 rounded-full uppercase tracking-widest">Activo</span>
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">He analizado los datos operativos actuales. Aquí tienes mis observaciones clave de hoy:</p>
-            </div>
-            
-            <ul className="space-y-3">
-              <li className="flex items-start gap-3 bg-emerald-500/5 border border-emerald-500/20 p-3 rounded-xl">
-                <TrendingUp className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
-                <p className="text-sm font-medium">
-                  <strong className="text-emerald-600">Crecimiento Demográfico:</strong> 
-                  ¡Excelente! Tienes un crecimiento del {metricas.porcentajeCrecimiento}% vs el mes pasado. Hay {metricas.alumnasNuevas} {textos.pluralSujetos.toLowerCase()} nuevas a las que sugerimos enviar un mensaje de bienvenida.
-                </p>
-              </li>
-              <li className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl">
-                <BarChart3 className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-sm font-medium">
-                  <strong className="text-amber-600">Rendimiento Operativo:</strong> 
-                  La actividad "{metricas.claseEstrella}" lidera la popularidad. Podrías considerar agregar un nuevo horario para maximizar ingresos.
-                </p>
-              </li>
-              <li className="flex items-start gap-3 bg-destructive/5 border border-destructive/20 p-3 rounded-xl">
-                <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm font-medium">
-                  <strong className="text-destructive">Atención de Flujo:</strong> 
-                  El sistema detectó posibles <span className="underline">{textos.alertasIA}</span>. Revisa la solapa de finanzas para enviar recordatorios masivos.
-                </p>
-              </li>
-            </ul>
-          </div>
+    <div className="space-y-6 animate-in fade-in pb-12 max-w-[1600px] mx-auto relative">
+      
+      {/* 1. HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Resumen de la Academia</h1>
+          <p className="text-slate-500 text-sm font-medium mt-1">Control de cuotas e ingresos en tiempo real.</p>
+        </div>
+        <div className="flex gap-3">
+          <Link href="/admin/finanzas"><Button variant="outline" className="h-11 border-red-200 text-red-600 font-bold px-6"><MinusCircle className="h-4 w-4 mr-2" /> Nuevo Gasto</Button></Link>
+          <Link href="/admin/finanzas"><Button className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md shadow-emerald-600/20"><PlusCircle className="h-4 w-4 mr-2" /> Registrar Cobro</Button></Link>
         </div>
       </div>
 
-      {/* KPIs PRINCIPALES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link href="/admin/finanzas" className="block transition-transform hover:scale-[1.02]">
-          <Card className="border-none shadow-sm bg-primary text-primary-foreground h-full relative overflow-hidden">
-            <div className="absolute right-0 top-0 opacity-10"><DollarSign className="h-40 w-40 -mt-6 -mr-6" /></div>
-            <CardContent className="p-6">
-              <div className="space-y-2 relative z-10">
-                <p className="text-primary-foreground/80 text-sm font-black uppercase tracking-widest">Recaudación</p>
-                <p className="text-4xl font-black">${metricas.recaudacion.toLocaleString('es-AR')}</p>
-              </div>
-              <p className="text-primary-foreground/70 text-xs mt-6 flex items-center font-bold">
-                Ver detalle de ingresos <ArrowUpRight className="h-3 w-3 ml-1" />
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/admin/alumnos" className="block transition-transform hover:scale-[1.02]">
-          <Card className="border border-border shadow-sm bg-card text-foreground h-full">
-            <CardContent className="p-6 flex flex-col h-full justify-between">
-              <div>
-                <div className="flex justify-between items-start">
-                  <div className="space-y-2">
-                    <p className="text-muted-foreground text-sm font-black uppercase tracking-widest">Total {textos.pluralSujetos}</p>
-                    <p className="text-4xl font-black">{metricas.totalAlumnas}</p>
-                  </div>
-                  <div className="bg-secondary p-3 rounded-xl"><Users className="h-6 w-6 text-secondary-foreground" /></div>
-                </div>
-                <div className="mt-4 space-y-1">
-                  <p className="text-foreground text-sm flex items-center font-bold">+{metricas.alumnasNuevas} este mes</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Card className="border border-border shadow-sm h-full bg-card">
-          <CardContent className="p-6 flex flex-col h-full justify-between">
-            <div className="flex justify-between items-start">
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-sm font-black uppercase tracking-widest">{textos.actividadPopular}</p>
-                <p className="text-xl font-black text-foreground truncate w-32">{metricas.claseEstrella}</p>
-                <p className="text-sm text-primary font-bold">{metricas.totalReservasEstrella} personas</p>
-              </div>
-              <div className="bg-secondary p-3 rounded-xl"><Flame className="h-6 w-6 text-secondary-foreground" /></div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Link href="/admin/clases" className="block transition-transform hover:scale-[1.02]">
-          <Card className="border border-border shadow-sm h-full bg-card">
-            <CardContent className="p-6 flex flex-col h-full justify-between">
-              <div>
-                <div className="flex justify-between items-start">
-                  <div className="space-y-2">
-                    <p className="text-muted-foreground text-sm font-black uppercase tracking-widest">En 48hs</p>
-                    <p className="text-3xl font-black text-foreground">{metricas.reservasProximas}</p>
-                  </div>
-                  <div className="bg-secondary p-3 rounded-xl"><CalendarHeart className="h-6 w-6 text-secondary-foreground" /></div>
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs mt-4 flex items-center font-bold border-t border-border pt-3 hover:text-primary transition-colors">
-                {textos.accionSecundaria} <ArrowUpRight className="h-3 w-3 ml-1" />
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+      {/* 2. KPIs GLOBALES */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="border-slate-200 shadow-sm"><CardContent className="p-5 flex items-center gap-4"><div className="bg-emerald-100 text-emerald-600 p-3 rounded-xl"><DollarSign className="h-6 w-6" /></div><div><p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Ingresos Mes</p><p className="text-2xl font-black text-slate-900">${metricas.recaudacionMes.toLocaleString('es-AR')}</p></div></CardContent></Card>
+        <Card className="border-slate-200 shadow-sm"><CardContent className="p-5 flex items-center gap-4"><div className="bg-blue-100 text-blue-600 p-3 rounded-xl"><Users className="h-6 w-6" /></div><div><p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Matrícula Activa</p><p className="text-2xl font-black text-slate-900">{metricas.totalAlumnasActivas}</p></div></CardContent></Card>
+        <Card className="border-slate-200 shadow-sm"><CardContent className="p-5 flex items-center gap-4"><div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl"><UserCheck className="h-6 w-6" /></div><div><p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Al día</p><p className="text-2xl font-black text-slate-900">{metricas.alumnasAlDia}</p></div></CardContent></Card>
+        <Card className="border-red-100 shadow-sm bg-red-50/50"><CardContent className="p-5 flex items-center gap-4"><div className="bg-red-100 text-red-600 p-3 rounded-xl"><UserMinus className="h-6 w-6" /></div><div><p className="text-red-800/70 text-xs font-bold uppercase tracking-wider">Morosas</p><p className="text-2xl font-black text-red-700">{metricas.alumnasEnMora}</p></div></CardContent></Card>
       </div>
 
-      {/* BLOQUE DINÁMICO: CANCELACIONES O AVISOS MENSUALES */}
-      <div className="mt-4">
-        <h3 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-muted-foreground" /> 
-          {modeloNegocio === 'reservas' ? 'Cupos liberados (Próximas 48hs)' : 'Panel de Morosidad (Demostración)'}
-        </h3>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
-        {modeloNegocio === 'reservas' ? (
-          <div className="bg-card rounded-xl border border-border shadow-sm p-2 divide-y divide-border">
-            {metricas.actividadReciente.map((act) => (
-              <div key={act.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-muted/30 transition-colors">
-                <div className="p-2 rounded-full mt-1 sm:mt-0 bg-secondary text-secondary-foreground shrink-0"><UserMinus className="h-4 w-4" /></div>
-                <div className="flex-1">
-                  <p className="text-foreground font-medium text-sm">
-                    <strong>{act.perfiles?.nombre} {act.perfiles?.apellido}</strong> liberó su lugar en <strong>{act.clases?.nivel}</strong>
-                  </p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                    <Clock className="h-3 w-3" /> Para el {act.fecha_clase.split('-').reverse().join('/')}
-                  </p>
-                </div>
-                <div className="mt-2 sm:mt-0 sm:ml-auto">
-                  <span className="text-[10px] font-black uppercase px-3 py-1 rounded-full tracking-widest bg-primary text-primary-foreground shadow-sm animate-pulse">¡Cupo Disponible!</span>
+        {/* COLUMNA IZQUIERDA: Agenda + Pagos */}
+        <div className="xl:col-span-2 space-y-6">
+          
+          {/* A. AGENDA */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="p-6 border-b border-slate-100 flex flex-row items-center justify-between bg-amber-50/30 rounded-t-xl">
+              <div className="flex items-center gap-2">
+                <StickyNote className="h-5 w-5 text-amber-500" />
+                <div>
+                  <CardTitle className="text-lg font-black text-slate-800">Mi Agenda Diaria</CardTitle>
+                  <p className="text-[11px] text-slate-500 font-medium">Tareas de hoy y atrasadas.</p>
                 </div>
               </div>
-            ))}
-            {metricas.actividadReciente.length === 0 && (
-              <div className="p-8 text-center text-muted-foreground text-sm">No hubo cancelaciones. ¡Todos los cupos están firmes!</div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-destructive/5 rounded-xl border border-destructive/20 shadow-sm p-8 text-center">
-            <UserMinus className="h-8 w-8 mx-auto mb-3 text-destructive" />
-            <p className="text-foreground font-bold">12 {textos.pluralSujetos} tienen la cuota vencida este mes.</p>
-            <Button variant="outline" className="mt-4 border-destructive text-destructive hover:bg-destructive hover:text-white">Notificar vía WhatsApp</Button>
-          </div>
-        )}
-      </div>
+              <Button onClick={() => setModalTareaVisible(true)} size="sm" className="h-9 bg-slate-900 text-white font-bold"><PlusCircle className="h-4 w-4 mr-1.5" /> Agregar</Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-100">
+                {tareasVisibles.length === 0 ? (
+                  <div className="p-10 text-center flex flex-col items-center"><CheckCircle2 className="h-10 w-10 text-emerald-200 mb-3" /><p className="text-slate-500 text-sm">¡Todo al día!</p></div>
+                ) : (
+                  tareasVisibles.map((rec) => {
+                    const cE = ETIQUETAS.find(e => e.id === rec.etiqueta)?.color || "bg-slate-100 text-slate-700"
+                    const atrasada = rec.fecha < hoyStr && !rec.completada
+                    return (
+                      <div key={rec.id} className={`p-4 px-6 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-slate-50 transition-colors ${rec.completada ? 'opacity-60' : ''}`}>
+                        <div className="flex flex-1 items-center gap-3">
+                          <button onClick={() => toggleTarea(rec.id)} className={rec.completada ? 'text-emerald-500' : 'text-slate-300'}>
+                            {rec.completada ? <CheckCircle2 className="h-6 w-6" /> : <Circle className="h-6 w-6" />}
+                          </button>
+                          <div>
+                            <p className={`font-bold text-sm ${rec.completada ? 'line-through text-slate-500' : 'text-slate-800'}`}>{rec.texto}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-sm ${cE}`}>{rec.etiqueta}</span>
+                              {atrasada && <span className="text-[10px] font-bold text-red-600 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Atrasada ({rec.fecha.split('-').reverse().join('/')})</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 pl-9 sm:pl-0">
+                          {!rec.completada && <Button onClick={() => iniciarPosponer(rec.id)} variant="outline" size="sm" className="h-8 text-[11px] font-bold text-amber-600 border-amber-200 gap-1.5"><Clock4 className="h-3.5 w-3.5" /> Posponer</Button>}
+                          <Button onClick={() => eliminarTarea(rec.id)} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* GRÁFICOS INFERIORES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-        
-        {/* Mapa de Calor / Demográfico */}
-        <Card className="border border-border shadow-sm bg-card">
-          <CardHeader className="border-b border-border pb-4">
-            <CardTitle className="text-lg flex items-center gap-2 text-foreground font-black uppercase tracking-tight">
-              <MapPin className="h-5 w-5 text-primary" /> Zonas de afluencia
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6 space-y-5">
-            <p className="text-sm text-muted-foreground mb-2 font-medium">Distribución según direcciones registradas.</p>
-            {barrios.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">Aún no hay zonas registradas.</div>
-            ) : (
-              barrios.map((barrio, i) => (
-                <div key={i} className="space-y-2">
-                  <div className="flex justify-between text-sm font-bold text-foreground uppercase tracking-tight">
-                    <span>{barrio.nombre}</span>
-                    <span>{barrio.porcentaje}%</span>
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-3">
-                    <div className="bg-primary h-3 rounded-full transition-all duration-1000" style={{ width: `${barrio.porcentaje}%` }}></div>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Ranking de Popularidad */}
-        <Card className="border border-border shadow-sm bg-card">
-          <CardHeader className="border-b border-border pb-4">
-            <CardTitle className="text-lg flex items-center gap-2 text-foreground font-black uppercase tracking-tight">
-              <TrendingUp className="h-5 w-5 text-primary" /> Rendimiento
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground mb-6 font-medium">Popularidad por tipo de actividad.</p>
-            <div className="space-y-4">
-              {metricas.rankingDisciplinas.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">No hay actividad registrada aún.</div>
-              ) : (
-                metricas.rankingDisciplinas.map((clase, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border bg-background hover:bg-muted/50 transition-colors">
-                    <div>
-                      <p className="font-bold text-foreground text-sm uppercase">{clase.nombre}</p>
-                      <div className="w-48 bg-secondary rounded-full h-2 mt-2">
-                        <div className="h-2 rounded-full bg-primary" style={{ width: `${clase.porcentajeBarra}%` }}></div>
+          {/* B. ÚLTIMOS PAGOS */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="p-6 border-b border-slate-100 flex flex-row items-center justify-between">
+              <CardTitle className="text-lg font-black text-slate-800 flex items-center gap-2"><Receipt className="h-5 w-5 text-slate-400" /> Cobros del Mes</CardTitle>
+              <Link href="/admin/finanzas" className="text-sm font-bold text-primary hover:underline flex items-center">Historial <ArrowUpRight className="h-4 w-4 ml-1" /></Link>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-100">
+                {metricas.ultimosPagos.map((p, idx) => (
+                  <div key={idx} className="p-4 px-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-sm">{p.beneficiario?.charAt(0).toUpperCase()}</div>
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">{p.beneficiario}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{p.concepto_categoria} • {new Date(p.fecha).toLocaleDateString('es-AR')}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Asistencia</p>
-                      <p className="font-black text-xl text-foreground leading-none mt-1">{clase.cantidad}</p>
-                    </div>
+                    <div className="text-right"><span className="font-black text-emerald-600">+ ${Number(p.monto).toLocaleString('es-AR')}</span></div>
                   </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
+        {/* 4. COLUMNA DERECHA: Cobranza de Cuotas */}
+        <div className="xl:col-span-1">
+          <Card className="border-red-200 shadow-lg shadow-red-900/5 bg-white sticky top-24">
+            <CardHeader className="p-5 border-b border-red-100 bg-red-50/50 rounded-t-xl">
+              <div className="flex items-center gap-2 text-red-700"><AlertCircle className="h-5 w-5" /><CardTitle className="text-base font-black uppercase tracking-tight">Cobranza de Cuotas</CardTitle></div>
+              <p className="text-xs text-red-600/70 font-medium mt-1">Avisos automáticos a morosas.</p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-100 h-[600px] overflow-y-auto">
+                {metricas.listaDeudores.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center"><UserCheck className="h-8 w-8 text-emerald-400 mb-3" />¡Todo al día!</div>
+                ) : (
+                  metricas.listaDeudores.map((alumno) => {
+                    const tL = alumno.telefono ? String(alumno.telefono).replace(/\D/g, '') : ""
+                    const msg = `Hola ${alumno.nombre.split(' ')[0]}, te escribimos de administración. Te recordamos que se encuentra pendiente el pago de tu cuota. ¡Avisanos cuando puedas regularizarlo! Gracias.`
+                    return (
+                      <div key={alumno.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
+                        <div className="flex-1 min-w-0 pr-4"><p className="font-bold text-slate-900 text-sm truncate uppercase">{alumno.nombre}</p><p className="text-[11px] text-slate-500 truncate mt-0.5">{alumno.detalle}</p></div>
+                        {tL ? (
+                          <a href={`https://wa.me/${tL}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="outline" className="h-8 w-8 rounded-full border-emerald-200 text-emerald-600 hover:bg-emerald-50"><MessageCircle className="h-4 w-4" /></Button></a>
+                        ) : <span className="text-[10px] text-slate-400 italic">Sin Tel</span>}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      {/* MODALES */}
+      {modalTareaVisible && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-6 space-y-5">
+            <h3 className="font-black text-lg text-slate-800 flex items-center gap-2"><StickyNote className="h-5 w-5 text-primary" /> Nueva Tarea</h3>
+            <form onSubmit={handleAgregarTarea} className="space-y-4">
+              <input type="text" autoFocus required placeholder="¿Qué tenés que hacer?" value={nuevaTarea.texto} onChange={(e) => setNuevaTarea({...nuevaTarea, texto: e.target.value})} className="w-full border border-slate-200 rounded-xl h-12 px-4 text-sm font-medium" />
+              <div className="grid grid-cols-2 gap-4">
+                <input type="date" required value={nuevaTarea.fecha} onChange={(e) => setNuevaTarea({...nuevaTarea, fecha: e.target.value})} className="w-full border border-slate-200 rounded-xl h-11 px-3 text-sm font-medium" />
+                <select value={nuevaTarea.etiqueta} onChange={(e) => setNuevaTarea({...nuevaTarea, etiqueta: e.target.value})} className="w-full border border-slate-200 rounded-xl h-11 px-3 text-sm font-medium">
+                  {ETIQUETAS.map(etq => <option key={etq.id} value={etq.id}>{etq.id}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-2"><Button type="button" onClick={() => setModalTareaVisible(false)} variant="outline" className="flex-1">Cancelar</Button><Button type="submit" className="flex-1 bg-slate-900 text-white">Guardar</Button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalPosponerVisible && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+            <h3 className="font-black text-lg text-slate-800 flex items-center gap-2"><Clock4 className="h-5 w-5 text-amber-600" /> Posponer</h3>
+            <form onSubmit={confirmarPosponer} className="space-y-4">
+              <input type="date" autoFocus required min={hoyStr} value={fechaPosponer} onChange={(e) => setFechaPosponer(e.target.value)} className="w-full border border-slate-200 rounded-xl h-12 px-4" />
+              <div className="flex gap-3"><Button type="button" onClick={() => setModalPosponerVisible(false)} variant="outline" className="flex-1">Cancelar</Button><Button type="submit" className="flex-1 bg-amber-500 text-white">Confirmar</Button></div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

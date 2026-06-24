@@ -27,7 +27,6 @@ export default function AdminAlumnosPage() {
   const [filtroEtiqueta, setFiltroEtiqueta] = useState("")
   const [alumnos, setAlumnos] = useState<any[]>([])
 
-  // Estado para la info dinámica de la academia (¡Datos Reales!)
   const [academiaOficial, setAcademiaOficial] = useState<any>({
     nombre_largo: "MI ACADEMIA",
     nombre_corto: "MI ACADEMIA",
@@ -36,7 +35,6 @@ export default function AdminAlumnosPage() {
     firma_url: ""
   })
 
-  // Estados de Modales
   const [modalCobro, setModalCobro] = useState<{abierto: boolean, familia: any[]}>({abierto: false, familia: []})
   const [reciboVisualizado, setReciboVisualizado] = useState<any | null>(null)
   const [modalPreRegistro, setModalPreRegistro] = useState(false)
@@ -44,7 +42,6 @@ export default function AdminAlumnosPage() {
   const modeloNegocio = "mensual" 
   const textos = DICCIONARIO[modeloNegocio as keyof typeof DICCIONARIO]
 
-  // --- FUNCIONES DE BORRADO LÓGICO Y FÍSICO ---
   const handleArchivarAlumno = async (id: string) => {
     try {
       const { error } = await supabase.from('usuarios').update({ activa: false }).eq('id', id)
@@ -71,7 +68,6 @@ export default function AdminAlumnosPage() {
 
   const cargarAlumnos = async () => {
     try {
-      // 0. TRAER CONFIGURACIÓN REAL DE LA ACADEMIA PARA EL PDF
       const { data: aca } = await supabase.from("academias").select("*").limit(1).single()
       if (aca) {
         setAcademiaOficial({
@@ -84,31 +80,51 @@ export default function AdminAlumnosPage() {
         })
       }
 
-      // 1. Usuarios Oficiales
-      const { data: dataOficial, error: errorOficial } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('rol', 'alumno')
-      
+      const { data: dataOficial, error: errorOficial } = await supabase.from('usuarios').select('*').eq('rol', 'alumno')
       if (errorOficial) throw errorOficial
 
-      // 2. Pre-inscripciones (Sala de espera)
-      const { data: dataPre, error: errorPre } = await supabase
-        .from('pre_inscripciones')
-        .select('*')
-        
+      const { data: dataPre, error: errorPre } = await supabase.from('pre_inscripciones').select('*')
       if (errorPre) throw errorPre
 
-      // 3. Traemos los pagos reales de la Base de Datos para el historial
-      const { data: dataPagos, error: errorPagos } = await supabase
-        .from('pagos')
-        .select('*')
-        .order('fecha', { ascending: false })
-      
+      const { data: dataPagos, error: errorPagos } = await supabase.from('pagos').select('*').order('fecha', { ascending: false })
       if (errorPagos) throw errorPagos
 
+      const hoy = new Date()
+      const diaActual = hoy.getDate()
+      const mesActual = hoy.getMonth()
+      const anioActual = hoy.getFullYear()
+
       const alumnasOficiales = (dataOficial || []).map((u: any) => {
-        const pagosAlumno = (dataPagos || []).filter(p => p.alumno_id === u.id)
+        // SOLUCIÓN 1: Si es menor, vincula también los pagos que se registraron a nombre de su tutor
+        const pagosAlumno = (dataPagos || []).filter(p => p.alumno_id === u.id || (u.titular_id && p.alumno_id === u.titular_id))
+        const flex = u.datos_flexibles || {}
+        
+        // SOLUCIÓN 2: Si es menor, busca el día de vencimiento personalizado de su tutor
+        let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
+        if (u.titular_id) {
+          const tutor = (dataOficial || []).find((t: any) => t.id === u.titular_id)
+          if (tutor?.datos_flexibles?.dia_vencimiento) {
+            diaVencimiento = parseInt(tutor.datos_flexibles.dia_vencimiento)
+          }
+        }
+        
+        // El sistema verifica si hay un pago de "CUOTA" en el mes corriente
+        const tienePagoEsteMes = pagosAlumno.some((p: any) => {
+          const fechaPago = new Date(p.fecha)
+          return p.concepto_categoria === 'CUOTA' && fechaPago.getMonth() === mesActual && fechaPago.getFullYear() === anioActual
+        })
+
+        let estadoCalculado = 'deuda'
+        
+        if (tienePagoEsteMes) {
+          estadoCalculado = 'al_dia'
+        } else {
+          if (diaActual <= diaVencimiento) {
+            estadoCalculado = 'al_dia'
+          } else {
+            estadoCalculado = 'deuda'
+          }
+        }
 
         return {
           id: u.id,
@@ -116,16 +132,16 @@ export default function AdminAlumnosPage() {
           apellido: "",
           email: u.email || "Sin correo (Menor)",
           telefono: u.telefono,
-          avatar_url: u.datos_flexibles?.avatar_url || null,
+          avatar_url: flex.avatar_url || null,
           titular_id: u.titular_id,
-          estado_cuota: u.datos_flexibles?.estado_cuota || 'vencida', 
-          creditos: u.datos_flexibles?.creditos_clases || 0,
-          contacto_urgencia: u.datos_flexibles?.contacto_urgencia || "",
-          documentos: u.datos_flexibles?.documentos || [],
+          estado_cuota: estadoCalculado, 
+          creditos: flex.creditos_clases || 0,
+          contacto_urgencia: flex.contacto_urgencia || "",
+          documentos: flex.documentos || [],
           pagos: pagosAlumno, 
-          asistencias: u.datos_flexibles?.asistencias || [],
+          asistencias: flex.asistencias || [],
           entrena: u.activa !== false,
-          datos_flexibles: u.datos_flexibles || {},
+          datos_flexibles: flex,
           es_preinscripcion: false 
         }
       })
@@ -177,17 +193,23 @@ export default function AdminAlumnosPage() {
     
     try {
       const nombresBeneficiarios = alumnos.filter(a => datos.alumnosAPagar.includes(a.id)).map(a => a.nombre).join(" / ")
-      // Como Supabase ya tiene la columna SERIAL, este número es falso y se pisa, pero lo dejamos por compatibilidad visual temporal
       const nroRecibo = `0001-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`
+
+      let fechaPago = new Date().toISOString()
+      if (datos.concepto === "CUOTA" && datos.mesImputado) {
+        const hoy = new Date()
+        fechaPago = new Date(hoy.getFullYear(), Number(datos.mesImputado) - 1, 15).toISOString()
+      }
 
       const { error: errorPago } = await supabase.from('pagos').insert({
         alumno_id: alumnoSeleccionado.id, 
         nro_recibo: nroRecibo,
         concepto_categoria: datos.concepto,
-        concepto_detalle: datos.observaciones || `Abono de ${datos.concepto}`,
+        concepto_detalle: datos.observaciones,
         monto: datos.monto,
         beneficiario: nombresBeneficiarios,
-        estado: 'aprobado'
+        estado: 'aprobado',
+        fecha: fechaPago 
       })
 
       if (errorPago) throw errorPago
@@ -196,10 +218,16 @@ export default function AdminAlumnosPage() {
         const { data: usr } = await supabase.from('usuarios').select('datos_flexibles').eq('id', idAlumno).single()
         const flexActual = usr?.datos_flexibles || {}
 
+        const mesActual = new Date().getMonth() + 1
+        const esPagoDelMesCorriente = datos.mesImputado ? Number(datos.mesImputado) === mesActual : true
+
         const nuevoPayloadFlex = {
           ...flexActual,
-          estado_cuota: 'al_dia',
           creditos_clases: (flexActual.creditos_clases || 0) + Number(datos.creditos || 0)
+        }
+
+        if (esPagoDelMesCorriente && datos.concepto === "CUOTA") {
+          nuevoPayloadFlex.estado_cuota = 'al_dia'
         }
 
         await supabase.from('usuarios').update({ datos_flexibles: nuevoPayloadFlex }).eq('id', idAlumno)
@@ -285,7 +313,6 @@ export default function AdminAlumnosPage() {
         />
       )}
 
-      {/* AHORA LE PASAMOS LA ACADEMIA OFICIAL DE LA BD, NO LA INVENTADA */}
       {reciboVisualizado && <VisorReciboPDF recibo={reciboVisualizado} academia={academiaOficial} onClose={() => setReciboVisualizado(null)} />}
     </div>
   )

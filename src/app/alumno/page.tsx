@@ -18,8 +18,6 @@ export default function PanelAlumnoPage() {
   const [cargando, setCargando] = useState(true)
   const [usaReservas, setUsaReservas] = useState<boolean>(true)
   const [proximasClases, setProximasClases] = useState<any[]>([])
-  
-  // NUEVO ESTADO PARA ALMACENAR LA LISTA DE AVISOS DE LA BD
   const [eventos, setEventos] = useState<any[]>([])
 
   useEffect(() => {
@@ -27,6 +25,7 @@ export default function PanelAlumnoPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push("/login"); return; }
 
+      // 1. Traemos la ficha del usuario principal
       const { data: perfilOficial, error } = await supabase.from('usuarios').select('*').eq('id', user.id).single()
       if (error || !perfilOficial) {
         toast.error("No se encontró tu ficha.")
@@ -38,8 +37,8 @@ export default function PanelAlumnoPage() {
         return 
       }
 
+      // 2. Traemos la configuración de la Academia
       if (perfilOficial.academia_id) {
-        // CORRECCIÓN: Seleccionamos la columna eventos_cartelera en lugar de las individuales
         const { data: academia } = await supabase
           .from('academias')
           .select('usa_reservas, eventos_cartelera')
@@ -48,16 +47,60 @@ export default function PanelAlumnoPage() {
 
         if (academia) {
           setUsaReservas(academia.usa_reservas)
-          
-          // Parseamos la lista de avisos de forma segura por si viene como String o JSON puro
           const listaAvisos = typeof academia.eventos_cartelera === 'string'
             ? JSON.parse(academia.eventos_cartelera)
             : (academia.eventos_cartelera || [])
-            
           setEventos(listaAvisos)
         }
       }
 
+      // 3. Traemos a los hijos vinculados
+      const { data: hijos } = await supabase.from('usuarios').select('*').eq('titular_id', perfilOficial.id)
+      
+      const todosLosFamiliares = [perfilOficial, ...(hijos || [])]
+      const idsFamiliares = todosLosFamiliares.map(f => f.id)
+
+      // 4. EL CEREBRO MATEMÁTICO: Traemos los pagos del mes en curso para evaluar la deuda real
+      const hoy = new Date()
+      const mesActual = hoy.getMonth()
+      const anioActual = hoy.getFullYear()
+      const inicioMesStr = `${anioActual}-${String(mesActual + 1).padStart(2, '0')}-01`
+
+      // Traemos TODOS los pagos de la familia de cualquier fecha (para ver si son alumnos nuevos)
+      const { data: historialPagos } = await supabase
+        .from('pagos')
+        .select('alumno_id, concepto_categoria, fecha')
+        .in('alumno_id', idsFamiliares)
+      
+      const pagos = historialPagos || []
+
+      // Función inteligente para evaluar el estado real de cada familiar
+      const evaluarEstadoReal = (usuario: any) => {
+        let flex: any = {}
+        try { flex = typeof usuario.datos_flexibles === 'string' ? JSON.parse(usuario.datos_flexibles) : (usuario.datos_flexibles || {}) } catch (e) {}
+
+        const pagosDelUsuario = pagos.filter(p => p.alumno_id === usuario.id || (usuario.titular_id && p.alumno_id === usuario.titular_id))
+        
+        let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
+        // Si es menor hereda vencimiento del tutor
+        if (usuario.titular_id && perfilOficial.datos_flexibles) {
+          const tutorFlex = typeof perfilOficial.datos_flexibles === 'string' ? JSON.parse(perfilOficial.datos_flexibles) : perfilOficial.datos_flexibles
+          if (tutorFlex.dia_vencimiento) diaVencimiento = parseInt(tutorFlex.dia_vencimiento)
+        }
+
+        const tienePagoEsteMes = pagosDelUsuario.some((p: any) => {
+          const f = new Date(p.fecha)
+          return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
+        })
+
+        if (pagosDelUsuario.length === 0) return "vencida" // Alumno nuevo siempre debe
+        if (tienePagoEsteMes) return "al_dia" // Pagó este mes
+        if (hoy.getDate() <= diaVencimiento) return "al_dia" // Aún no vence
+        
+        return "vencida" // Se pasó el vencimiento y no pagó
+      }
+
+      // 5. Armamos la lista mapeada ya con el estado calculado en vivo
       const datosPadre = {
         id: perfilOficial.id,
         nombre: perfilOficial.nombre,
@@ -65,16 +108,15 @@ export default function PanelAlumnoPage() {
         telefono: perfilOficial.telefono,
         avatar_url: perfilOficial.datos_flexibles?.avatar_url || null, 
         entrena: perfilOficial.activa !== false,
-        estado_cuota: perfilOficial.datos_flexibles?.estado_cuota || "vencida", 
+        estado_cuota: evaluarEstadoReal(perfilOficial), // <-- CÁLCULO EN VIVO
         creditos: perfilOficial.datos_flexibles?.creditos_clases || 0
       }
 
-      const { data: hijos } = await supabase.from('usuarios').select('*').eq('titular_id', perfilOficial.id)
       const hijosMapeados = (hijos || []).map(h => ({
         id: h.id, 
         nombre: h.nombre, 
         avatar_url: h.datos_flexibles?.avatar_url || null,
-        estado_cuota: h.datos_flexibles?.estado_cuota || "vencida", 
+        estado_cuota: evaluarEstadoReal(h), // <-- CÁLCULO EN VIVO
         creditos: h.datos_flexibles?.creditos_clases || 0
       }))
 
