@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Users, Send, Clock, Filter, AlertCircle, ShieldCheck } from "lucide-react"
+import { Search, Users, Send, Clock, Filter, AlertCircle, ShieldCheck, PauseCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useState } from "react"
@@ -22,7 +22,6 @@ export default function ListaDirectorio({
   filtroEtiqueta, onFiltroEtiquetaChange, onAbrirDetalle, onPreRegistro
 }: ListaDirectorioProps) {
   
-  // Extraemos dinámicamente todas las etiquetas únicas que existen en la BD
   const etiquetasUnicas = Array.from(new Set(
     alumnos.flatMap(a => a.datos_flexibles?.etiquetas || [])
   )).filter(Boolean) as string[]
@@ -42,7 +41,6 @@ export default function ListaDirectorio({
       </div>
 
       <div className="bg-card p-4 rounded-2xl border shadow-sm space-y-4">
-        {/* BARRA DE BÚSQUEDA */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input 
@@ -53,7 +51,6 @@ export default function ListaDirectorio({
           />
         </div>
 
-        {/* FILTROS RÁPIDOS Y ETIQUETAS */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
           <Filter className="h-4 w-4 text-muted-foreground shrink-0 mr-2" />
           
@@ -66,7 +63,6 @@ export default function ListaDirectorio({
             Todos
           </Button>
 
-          {/* Filtros Inteligentes (Automáticos) */}
           {modeloNegocio === 'mensual' && (
             <Button 
               variant={filtroEtiqueta === 'deudores' ? 'destructive' : 'outline'} 
@@ -87,10 +83,8 @@ export default function ListaDirectorio({
             <ShieldCheck className="h-3 w-3 mr-1" /> Solo Tutores
           </Button>
 
-          {/* Separador */}
           {etiquetasUnicas.length > 0 && <div className="h-4 w-px bg-border mx-2 shrink-0"></div>}
 
-          {/* Etiquetas Dinámicas de la Academia */}
           {etiquetasUnicas.map(etiqueta => (
             <Button 
               key={etiqueta}
@@ -113,83 +107,90 @@ export default function ListaDirectorio({
           {alumnos.length === 0 ? (
             <p className="p-12 text-center text-muted-foreground italic text-sm">No se encontraron resultados con los filtros actuales.</p>
           ) : (
-            alumnos.map((alumno) => (
-              <div 
-                key={alumno.id} 
-                onClick={() => onAbrirDetalle(alumno)} 
-                className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between gap-4 hover:bg-secondary/10 cursor-pointer group transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  
-                  {/* FOTO / INICIALES */}
-                  <div className={`h-12 w-12 rounded-full font-black flex items-center justify-center overflow-hidden shrink-0 transition-all ${
-                    alumno.es_preinscripcion 
-                      ? 'bg-amber-500/10 border-2 border-dashed border-amber-500 text-amber-600' 
-                      : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground'
-                  }`}>
-                    {alumno.avatar_url && alumno.avatar_url.trim() !== "" ? (
-                      <img src={alumno.avatar_url} alt="avatar" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full bg-slate-200" />
-                    )}
-                  </div>
+            alumnos.map((alumno) => {
+              const esPausada = alumno.datos_flexibles?.pausado === true
 
-                  <div>
-                    <p className="font-black text-base uppercase text-foreground group-hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
-                      {alumno.nombre} {alumno.apellido}
-                      {alumno.es_preinscripcion && (
-                        <span className="text-[9px] bg-amber-500 text-white px-2 py-0.5 rounded-md font-black tracking-widest uppercase animate-pulse">Sala de Espera</span>
+              return (
+                <div 
+                  key={alumno.id} 
+                  onClick={() => onAbrirDetalle(alumno)} 
+                  className={`p-4 sm:p-5 flex flex-col sm:flex-row justify-between gap-4 cursor-pointer group transition-colors ${esPausada ? 'hover:bg-amber-50/50 bg-amber-50/20' : 'hover:bg-secondary/10'}`}
+                >
+                  <div className="flex items-center gap-4">
+                    
+                    <div className={`h-12 w-12 rounded-full font-black flex items-center justify-center overflow-hidden shrink-0 transition-all ${
+                      alumno.es_preinscripcion 
+                        ? 'bg-amber-500/10 border-2 border-dashed border-amber-500 text-amber-600' 
+                        : (esPausada ? 'bg-amber-100 text-amber-600 border border-amber-300' : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground')
+                    }`}>
+                      {alumno.avatar_url && alumno.avatar_url.trim() !== "" ? (
+                        <img src={alumno.avatar_url} alt="avatar" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-lg">{alumno.nombre.charAt(0)}</div>
                       )}
-                      {alumno.entrena === false && (
-                        <span className="text-[9px] border border-amber-500 text-amber-600 px-2 py-0.5 rounded-md font-black tracking-widest uppercase">Tutor</span>
+                    </div>
+
+                    <div>
+                      <p className="font-black text-base uppercase text-foreground group-hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
+                        {alumno.nombre} {alumno.apellido}
+                        {alumno.es_preinscripcion && (
+                          <span className="text-[9px] bg-amber-500 text-white px-2 py-0.5 rounded-md font-black tracking-widest uppercase animate-pulse">Sala de Espera</span>
+                        )}
+                        {alumno.entrena === false && (
+                          <span className="text-[9px] border border-amber-500 text-amber-600 px-2 py-0.5 rounded-md font-black tracking-widest uppercase">Tutor</span>
+                        )}
+                      </p>
+                      
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 font-medium">
+                        {alumno.es_preinscripcion ? (
+                          <span className="text-amber-600 flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Pendiente de registro</span>
+                        ) : (
+                          alumno.email || "Menor asociado a tutor"
+                        )}
+                      </p>
+
+                      {alumno.datos_flexibles?.etiquetas?.length > 0 && (
+                        <div className="flex gap-1 mt-1.5 flex-wrap">
+                          {alumno.datos_flexibles.etiquetas.map((tag: string) => (
+                            <span key={tag} className="text-[9px] bg-secondary text-muted-foreground px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">{tag}</span>
+                          ))}
+                        </div>
                       )}
+                    </div>
+                  </div>
+                  
+                  <div className="text-left sm:text-right flex items-center sm:items-end justify-between sm:justify-center sm:flex-col gap-2">
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest sm:mb-1">
+                      {modeloNegocio === 'mensual' ? 'Estado de Cuota' : 'Créditos'}
                     </p>
                     
-                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 font-medium">
-                      {alumno.es_preinscripcion ? (
-                        <span className="text-amber-600 flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Pendiente de registro</span>
+                    {alumno.es_preinscripcion ? (
+                      modeloNegocio === 'reservas' ? (
+                        <p className="font-black text-2xl leading-none text-amber-600">{alumno.creditos}</p>
                       ) : (
-                        alumno.email || "Menor asociado a tutor"
-                      )}
-                    </p>
-
-                    {/* MUESTRA LAS ETIQUETAS DEL ALUMNO DEBAJO DEL MAIL */}
-                    {alumno.datos_flexibles?.etiquetas?.length > 0 && (
-                      <div className="flex gap-1 mt-1.5 flex-wrap">
-                        {alumno.datos_flexibles.etiquetas.map((tag: string) => (
-                          <span key={tag} className="text-[9px] bg-secondary text-muted-foreground px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">{tag}</span>
-                        ))}
-                      </div>
+                        <span className="text-[10px] uppercase font-black px-3 py-1.5 rounded-full bg-amber-100 text-amber-700">Por Activar</span>
+                      )
+                    ) : (
+                      modeloNegocio === 'mensual' ? (
+                        esPausada ? (
+                          <span className="text-[10px] uppercase font-black px-3 py-1.5 rounded-full flex items-center gap-1.5 bg-amber-100 text-amber-700 border border-amber-300">
+                            <PauseCircle className="h-3 w-3" /> Pausada
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] uppercase font-black px-3 py-1.5 rounded-full flex items-center gap-1.5 ${alumno.estado_cuota === 'al_dia' ? 'bg-emerald-100 text-emerald-700' : 'bg-destructive/10 text-destructive'}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${alumno.estado_cuota === 'al_dia' ? 'bg-emerald-500' : 'bg-destructive animate-pulse'}`}></span>
+                            {alumno.estado_cuota === 'al_dia' ? 'Al Día' : 'Deuda'}
+                          </span>
+                        )
+                      ) : (
+                        <p className="font-black text-2xl leading-none text-foreground">{alumno.creditos}</p>
+                      )
                     )}
                   </div>
-                </div>
-                
-                {/* COLUMNA DERECHA COMPORTAMIENTO FINANCIERO */}
-                <div className="text-left sm:text-right flex items-center sm:items-end justify-between sm:justify-center sm:flex-col gap-2">
-                  <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest sm:mb-1">
-                    {modeloNegocio === 'mensual' ? 'Estado de Cuota' : 'Créditos'}
-                  </p>
-                  
-                  {alumno.es_preinscripcion ? (
-                    modeloNegocio === 'reservas' ? (
-                      <p className="font-black text-2xl leading-none text-amber-600">{alumno.creditos}</p>
-                    ) : (
-                      <span className="text-[10px] uppercase font-black px-3 py-1.5 rounded-full bg-amber-100 text-amber-700">Por Activar</span>
-                    )
-                  ) : (
-                    modeloNegocio === 'mensual' ? (
-                      <span className={`text-[10px] uppercase font-black px-3 py-1.5 rounded-full flex items-center gap-1.5 ${alumno.estado_cuota === 'al_dia' ? 'bg-emerald-100 text-emerald-700' : 'bg-destructive/10 text-destructive'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${alumno.estado_cuota === 'al_dia' ? 'bg-emerald-500' : 'bg-destructive animate-pulse'}`}></span>
-                        {alumno.estado_cuota === 'al_dia' ? 'Al Día' : 'Deuda'}
-                      </span>
-                    ) : (
-                      <p className="font-black text-2xl leading-none text-foreground">{alumno.creditos}</p>
-                    )
-                  )}
-                </div>
 
-              </div>
-            ))
+                </div>
+              )
+            })
           )}
         </div>
       </div>

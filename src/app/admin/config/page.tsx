@@ -19,7 +19,6 @@ export default function ConfiguracionAdminPage() {
   const [pestaña, setPestaña] = useState<'institucional' | 'cartelera' | 'tarifas' | 'reglas'>('institucional')
   const [academiaId, setAcademiaId] = useState<string | null>(null)
   
-  // ESTADOS DE LA IDENTIDAD Y CARTELERA
   const [infoAcademia, setInfoAcademia] = useState({
     nombre_largo: "",
     nombre_corto: "",
@@ -27,7 +26,7 @@ export default function ConfiguracionAdminPage() {
     admin_nombre: "",
     logo_url: "",
     firma_url: "",
-    eventos_cartelera: [] as any[] // <-- AHORA ES UN ARRAY
+    eventos_cartelera: [] as any[]
   })
   
   const [cargandoInfo, setCargandoInfo] = useState(true)
@@ -35,22 +34,18 @@ export default function ConfiguracionAdminPage() {
   const [subiendoLogo, setSubiendoLogo] = useState(false)
   const [subiendoFirma, setSubiendoFirma] = useState(false)
 
-  // ESTADO PARA EL FORMULARIO DEL NUEVO EVENTO
   const [nuevoEvento, setNuevoEvento] = useState({ titulo: "", descripcion: "" })
   const [archivoEvento, setArchivoEvento] = useState<File | null>(null)
   const [publicandoEvento, setPublicandoEvento] = useState(false)
   const [borrandoEventoId, setBorrandoEventoId] = useState<string | null>(null)
 
-  const [tarifas, setTarifas] = useState([
-    { id: 1, nombre: "Cuota Individual", precio: 15000, tipo: "mensual", creditos: null },
-    { id: 2, nombre: "Cuota Grupo Familiar (2 Hnos)", precio: 25000, tipo: "mensual", creditos: null },
-    { id: 3, nombre: "Pack 4 Clases", precio: 8500, tipo: "creditos", creditos: 4 },
-    { id: 4, nombre: "Clase Suelta", precio: 3000, tipo: "creditos", creditos: 1 },
-  ])
-
+  // NUEVO ESTADO DE TARIFAS (Vacío al inicio)
+  const [tarifas, setTarifas] = useState<any[]>([])
   const [reglas, setReglas] = useState({ horasCancelacion: 5, pideAptoFisico: true })
+  
   const [modalTarifa, setModalTarifa] = useState(false)
   const [tarifaEditando, setTarifaEditando] = useState<any>(null)
+  const [guardandoTarifa, setGuardandoTarifa] = useState(false)
 
   useEffect(() => {
     const cargarConfiguracion = async () => {
@@ -68,9 +63,13 @@ export default function ConfiguracionAdminPage() {
             firma_url: data.firma_url || "",
             eventos_cartelera: data.eventos_cartelera || []
           })
+
+          // CARGAR TARIFAS DESDE SUPABASE
+          const { data: dataTarifas } = await supabase.from('tarifas').select('*').eq('academia_id', data.id).order('precio', { ascending: true })
+          if (dataTarifas) setTarifas(dataTarifas)
         }
       } catch (error) {
-        console.error("No se encontró configuración de academia, se usarán los valores por defecto.")
+        console.error("Error al cargar la configuración.")
       } finally {
         setCargandoInfo(false)
       }
@@ -78,7 +77,6 @@ export default function ConfiguracionAdminPage() {
     cargarConfiguracion()
   }, [supabase])
 
-  // --- LÓGICA DE IMÁGENES GLOBALES (LOGO/FIRMA) ---
   const handleSubirImagen = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'logo' | 'firma') => {
     try {
       if (!e.target.files || e.target.files.length === 0 || !academiaId) return
@@ -104,7 +102,7 @@ export default function ConfiguracionAdminPage() {
       toast.success(`Imagen de ${tipo} actualizada.`)
 
     } catch (error: any) {
-      toast.error("Error al subir el archivo: " + error.message)
+      toast.error("Error al subir el archivo.")
     } finally {
       setSubiendoLogo(false); setSubiendoFirma(false);
     }
@@ -124,13 +122,12 @@ export default function ConfiguracionAdminPage() {
       if (error) throw error
       toast.success("Textos institucionales guardados con éxito.")
     } catch (error: any) {
-      toast.error("Error al guardar: " + error.message)
+      toast.error("Error al guardar textos.")
     } finally {
       setGuardandoTextos(false)
     }
   }
 
-  // --- LÓGICA DE MULTIPLES EVENTOS (CARTELERA) ---
   const handlePublicarEvento = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!academiaId || !nuevoEvento.titulo) return
@@ -139,20 +136,16 @@ export default function ConfiguracionAdminPage() {
     try {
       let imagenUrl = ""
       
-      // Si eligió una foto para el aviso, la subimos primero
       if (archivoEvento) {
         const fileExt = archivoEvento.name.split('.').pop()
         const nombreLimpio = archivoEvento.name.replace(/[^a-zA-Z0-9.-]/g, '_')
         const filePath = `institucional/${academiaId}/avisos/${Date.now()}-${nombreLimpio}`
-        
         const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, archivoEvento)
         if (uploadError) throw uploadError
-        
         const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
         imagenUrl = data.publicUrl
       }
 
-      // Armamos el objeto del nuevo evento
       const eventoFinal = {
         id: `ev-${Date.now()}`,
         titulo: nuevoEvento.titulo,
@@ -161,20 +154,17 @@ export default function ConfiguracionAdminPage() {
         fecha: new Date().toISOString()
       }
 
-      // Lo agregamos al principio del array
       const nuevaLista = [eventoFinal, ...(infoAcademia.eventos_cartelera || [])]
-
-      // Guardamos en Supabase
       const { error: updateError } = await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
       if (updateError) throw updateError
 
       setInfoAcademia(prev => ({ ...prev, eventos_cartelera: nuevaLista }))
       setNuevoEvento({ titulo: "", descripcion: "" })
       setArchivoEvento(null)
-      toast.success("¡Evento publicado en la cartelera de los alumnos!")
+      toast.success("¡Evento publicado!")
 
     } catch (error: any) {
-      toast.error("Error al publicar evento: " + error.message)
+      toast.error("Error al publicar evento.")
     } finally {
       setPublicandoEvento(false)
     }
@@ -186,21 +176,17 @@ export default function ConfiguracionAdminPage() {
     
     setBorrandoEventoId(idAviso)
     try {
-      // 1. Si tenía imagen, la borramos del bucket
       if (urlImagen) {
         const filePath = urlImagen.split('/avatars/')[1]
         if (filePath) await supabase.storage.from('avatars').remove([filePath])
       }
 
-      // 2. Filtramos la lista
       const nuevaLista = (infoAcademia.eventos_cartelera || []).filter((ev: any) => ev.id !== idAviso)
-
-      // 3. Actualizamos Supabase
       const { error } = await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
       if (error) throw error
 
       setInfoAcademia(prev => ({ ...prev, eventos_cartelera: nuevaLista }))
-      toast.success("Aviso eliminado correctamente.")
+      toast.success("Aviso eliminado.")
     } catch (error: any) {
       toast.error("Error al borrar aviso.")
     } finally {
@@ -208,14 +194,73 @@ export default function ConfiguracionAdminPage() {
     }
   }
 
-  // --- LÓGICA TARIFAS (MOCK) ---
-  const abrirModalNueva = () => { setTarifaEditando({ nombre: "", precio: "", tipo: esMensual ? "mensual" : "creditos", creditos: "" }); setModalTarifa(true) }
-  const abrirModalEditar = (tarifa: any) => { setTarifaEditando(tarifa); setModalTarifa(true) }
-  const guardarTarifa = (e: React.FormEvent) => {
+  // --- LÓGICA DE TARIFAS CONECTADA A SUPABASE ---
+  const abrirModalNueva = () => { 
+    setTarifaEditando({ id: null, nombre: "", precio: "", tipo: esMensual ? "mensual" : "creditos", creditos: "" })
+    setModalTarifa(true) 
+  }
+  
+  const abrirModalEditar = (tarifa: any) => { 
+    setTarifaEditando({ ...tarifa })
+    setModalTarifa(true) 
+  }
+
+  const guardarTarifa = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (tarifaEditando.id) { setTarifas(tarifas.map(t => t.id === tarifaEditando.id ? { ...tarifaEditando, precio: Number(tarifaEditando.precio) } : t)) } 
-    else { setTarifas([...tarifas, { ...tarifaEditando, id: Date.now(), precio: Number(tarifaEditando.precio) }]) }
-    setModalTarifa(false)
+    if (!academiaId) return
+    setGuardandoTarifa(true)
+
+    try {
+      if (tarifaEditando.id) {
+        // ACTUALIZAR TARIFA EXISTENTE
+        const { error } = await supabase.from('tarifas').update({
+          nombre: tarifaEditando.nombre,
+          precio: Number(tarifaEditando.precio),
+          creditos: tarifaEditando.creditos ? Number(tarifaEditando.creditos) : null
+        }).eq('id', tarifaEditando.id)
+        
+        if (error) throw error
+        setTarifas(tarifas.map(t => t.id === tarifaEditando.id ? { ...t, ...tarifaEditando, precio: Number(tarifaEditando.precio) } : t))
+        toast.success("Tarifa actualizada.")
+      } else {
+        // CREAR NUEVA TARIFA
+        const { data, error } = await supabase.from('tarifas').insert({
+          academia_id: academiaId,
+          nombre: tarifaEditando.nombre,
+          precio: Number(tarifaEditando.precio),
+          tipo: esMensual ? 'mensual' : 'creditos',
+          creditos: esMensual ? null : Number(tarifaEditando.creditos)
+        }).select().single()
+        
+        if (error) throw error
+        if (data) setTarifas([...tarifas, data])
+        toast.success("Nueva tarifa creada.")
+      }
+      setModalTarifa(false)
+    } catch (error: any) {
+      toast.error("Error al guardar tarifa.")
+    } finally {
+      setGuardandoTarifa(false)
+    }
+  }
+
+  const borrarTarifa = async () => {
+    if (!tarifaEditando?.id) return
+    if (!confirm("¿Eliminar definitivamente esta tarifa?")) return
+    
+    setGuardandoTarifa(true)
+    try {
+      const { error } = await supabase.from('tarifas').delete().eq('id', tarifaEditando.id)
+      if (error) throw error
+      
+      setTarifas(tarifas.filter(t => t.id !== tarifaEditando.id))
+      toast.success("Tarifa eliminada.")
+      setModalTarifa(false)
+    } catch (error: any) {
+      toast.error("Error al eliminar tarifa.")
+    } finally {
+      setGuardandoTarifa(false)
+    }
   }
 
   if (cargandoInfo) return <div className="flex h-[70vh] justify-center items-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -223,7 +268,6 @@ export default function ConfiguracionAdminPage() {
   return (
     <div className="space-y-8 animate-in fade-in pb-12 max-w-5xl mx-auto">
       
-      {/* HEADER PRINCIPAL */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight italic flex items-center gap-3">
@@ -233,7 +277,6 @@ export default function ConfiguracionAdminPage() {
         </div>
       </div>
 
-      {/* SISTEMA DE PESTAÑAS */}
       <div className="flex gap-2 border-b border-border overflow-x-auto pb-px scrollbar-hide">
         <button onClick={() => setPestaña('institucional')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestaña === 'institucional' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
           <Building2 className="h-4 w-4" /> Institucional
@@ -251,9 +294,7 @@ export default function ConfiguracionAdminPage() {
 
       <div className="pt-2">
 
-        {/* =========================================================================
-            PESTAÑA 1: INSTITUCIONAL Y RECIBOS
-        ========================================================================= */}
+        {/* PESTAÑA INSTITUCIONAL */}
         {pestaña === 'institucional' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-2">
             <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card flex flex-col">
@@ -265,7 +306,6 @@ export default function ConfiguracionAdminPage() {
               </div>
               <CardContent className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Textos */}
                   <div className="space-y-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre Legal Completo</label>
@@ -287,7 +327,6 @@ export default function ConfiguracionAdminPage() {
                     </div>
                   </div>
 
-                  {/* Imágenes */}
                   <div className="space-y-6 md:border-l md:border-border md:pl-8">
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">Logo Oficial</label>
@@ -325,13 +364,9 @@ export default function ConfiguracionAdminPage() {
           </div>
         )}
 
-        {/* =========================================================================
-            PESTAÑA 2: CARTELERA DIGITAL (MÚLTIPLES EVENTOS)
-        ========================================================================= */}
+        {/* PESTAÑA CARTELERA */}
         {pestaña === 'cartelera' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-bottom-2">
-            
-            {/* Formulario para publicar un nuevo evento */}
             <div className="space-y-6">
               <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card border-amber-500/30">
                 <div className="px-6 py-5 border-b border-border bg-amber-500/10">
@@ -342,32 +377,17 @@ export default function ConfiguracionAdminPage() {
                 <form onSubmit={handlePublicarEvento} className="p-6 space-y-5">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Título del Aviso</label>
-                    <input 
-                      required
-                      type="text" 
-                      value={nuevoEvento.titulo} 
-                      onChange={e => setNuevoEvento({...nuevoEvento, titulo: e.target.value})} 
-                      placeholder="Ej: ¡Torneo de Invierno!" 
-                      className="w-full bg-background border border-border rounded-xl h-10 px-3 text-sm font-bold outline-none focus:border-amber-500" 
-                    />
+                    <input required type="text" value={nuevoEvento.titulo} onChange={e => setNuevoEvento({...nuevoEvento, titulo: e.target.value})} placeholder="Ej: ¡Torneo de Invierno!" className="w-full bg-background border border-border rounded-xl h-10 px-3 text-sm font-bold outline-none focus:border-amber-500" />
                   </div>
-                  
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Detalles del Evento</label>
-                    <textarea 
-                      value={nuevoEvento.descripcion} 
-                      onChange={e => setNuevoEvento({...nuevoEvento, descripcion: e.target.value})} 
-                      placeholder="Escribí fechas, lugares o información importante..." 
-                      className="w-full bg-background border border-border rounded-xl p-3 text-sm outline-none focus:border-amber-500 resize-none min-h-[100px]" 
-                    />
+                    <textarea value={nuevoEvento.descripcion} onChange={e => setNuevoEvento({...nuevoEvento, descripcion: e.target.value})} placeholder="Escribí fechas, lugares o información importante..." className="w-full bg-background border border-border rounded-xl p-3 text-sm outline-none focus:border-amber-500 resize-none min-h-[100px]" />
                   </div>
-
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Flyer / Imagen (Opcional)</label>
                     <div className="flex items-center gap-3">
                       <Button type="button" variant="outline" onClick={() => document.getElementById('upload-aviso-nuevo')?.click()} className="font-bold text-xs h-10 border-dashed">
-                        <UploadCloud className="h-4 w-4 mr-2" /> 
-                        {archivoEvento ? "Cambiar Archivo" : "Seleccionar Imagen"}
+                        <UploadCloud className="h-4 w-4 mr-2" /> {archivoEvento ? "Cambiar Archivo" : "Seleccionar Imagen"}
                       </Button>
                       <input type="file" id="upload-aviso-nuevo" className="hidden" accept="image/*" onChange={(e) => {
                         if (e.target.files && e.target.files.length > 0) setArchivoEvento(e.target.files[0])
@@ -375,7 +395,6 @@ export default function ConfiguracionAdminPage() {
                       {archivoEvento && <span className="text-xs font-bold text-emerald-600">Imagen lista ✓</span>}
                     </div>
                   </div>
-
                   <Button type="submit" disabled={publicandoEvento || !nuevoEvento.titulo} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black uppercase tracking-widest h-12 shadow-md">
                     {publicandoEvento ? <Loader2 className="h-5 w-5 animate-spin" /> : "Publicar en Cartelera"}
                   </Button>
@@ -383,12 +402,10 @@ export default function ConfiguracionAdminPage() {
               </Card>
             </div>
 
-            {/* Lista Histórica de Eventos Publicados */}
             <div className="space-y-4">
               <h3 className="font-black text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-primary" /> Avisos Publicados ({infoAcademia.eventos_cartelera?.length || 0})
               </h3>
-              
               <div className="space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
                 {(!infoAcademia.eventos_cartelera || infoAcademia.eventos_cartelera.length === 0) ? (
                   <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-3xl bg-secondary/10">
@@ -409,13 +426,7 @@ export default function ConfiguracionAdminPage() {
                             <h3 className="font-black text-foreground text-sm uppercase tracking-tight">{evento.titulo}</h3>
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{evento.descripcion}</p>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleBorrarEvento(evento.id, evento.imagen_url)} 
-                            disabled={borrandoEventoId === evento.id}
-                            className="h-8 w-8 text-muted-foreground hover:bg-destructive hover:text-white shrink-0 rounded-full"
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => handleBorrarEvento(evento.id, evento.imagen_url)} disabled={borrandoEventoId === evento.id} className="h-8 w-8 text-muted-foreground hover:bg-destructive hover:text-white shrink-0 rounded-full">
                             {borrandoEventoId === evento.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </Button>
                         </div>
@@ -428,13 +439,10 @@ export default function ConfiguracionAdminPage() {
                 )}
               </div>
             </div>
-
           </div>
         )}
 
-        {/* =========================================================================
-            PESTAÑA 3: TARIFAS (Mantenida igual, pero con el nuevo layout)
-        ========================================================================= */}
+        {/* PESTAÑA TARIFAS */}
         {pestaña === 'tarifas' && (
           <div className="animate-in slide-in-from-bottom-2">
             <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card">
@@ -446,34 +454,40 @@ export default function ConfiguracionAdminPage() {
               </div>
               <CardContent className="p-0">
                 <div className="divide-y divide-border">
-                  {tarifas.filter(t => esMensual ? t.tipo === "mensual" : t.tipo === "creditos").map(tarifa => (
-                    <div key={tarifa.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-secondary/5 transition-colors">
-                      <div>
-                        <h3 className="font-black text-lg uppercase text-foreground">{tarifa.nombre}</h3>
-                        <p className="text-xs text-muted-foreground font-medium mt-1">
-                          {tarifa.tipo === 'mensual' ? 'Renovación automática cada mes' : `Otorga ${tarifa.creditos} créditos para reservas`}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto">
-                        <div className="text-left sm:text-right">
-                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Precio Final</p>
-                          <p className="text-2xl font-black text-emerald-600">${tarifa.precio.toLocaleString('es-AR')}</p>
-                        </div>
-                        <Button onClick={() => abrirModalEditar(tarifa)} variant="outline" size="icon" className="border-border hover:bg-secondary text-foreground">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </div>
+                  {tarifas.length === 0 ? (
+                    <div className="p-12 text-center text-muted-foreground">
+                      <CreditCard className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                      <p className="text-sm italic">Aún no configuraste ninguna tarifa en el sistema.</p>
+                      <Button onClick={abrirModalNueva} variant="link" className="mt-2 font-bold text-primary">Crear mi primera tarifa</Button>
                     </div>
-                  ))}
+                  ) : (
+                    tarifas.map(tarifa => (
+                      <div key={tarifa.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-secondary/5 transition-colors">
+                        <div>
+                          <h3 className="font-black text-lg uppercase text-foreground">{tarifa.nombre}</h3>
+                          <p className="text-xs text-muted-foreground font-medium mt-1">
+                            {tarifa.tipo === 'mensual' ? 'Renovación automática cada mes' : `Otorga ${tarifa.creditos} créditos para reservas`}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto">
+                          <div className="text-left sm:text-right">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Precio Final</p>
+                            <p className="text-2xl font-black text-emerald-600">${Number(tarifa.precio).toLocaleString('es-AR')}</p>
+                          </div>
+                          <Button onClick={() => abrirModalEditar(tarifa)} variant="outline" size="icon" className="border-border hover:bg-secondary text-foreground shrink-0">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* =========================================================================
-            PESTAÑA 4: REGLAS OPERATIVAS (Mantenida igual)
-        ========================================================================= */}
+        {/* PESTAÑA REGLAS */}
         {pestaña === 'reglas' && (
           <div className="max-w-2xl animate-in slide-in-from-bottom-2">
             <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card">
@@ -484,9 +498,7 @@ export default function ConfiguracionAdminPage() {
                 {!esMensual && (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-bold flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-primary" /> Límite de Cancelación
-                      </label>
+                      <label className="text-sm font-bold flex items-center gap-2"><Clock className="h-4 w-4 text-primary" /> Límite de Cancelación</label>
                     </div>
                     <div className="flex items-center gap-3">
                       <input type="number" value={reglas.horasCancelacion} onChange={e => setReglas({...reglas, horasCancelacion: Number(e.target.value)})} className="w-20 bg-background border border-border rounded-xl h-10 px-3 text-center font-bold outline-none focus:border-primary" />
@@ -495,12 +507,9 @@ export default function ConfiguracionAdminPage() {
                     <p className="text-xs text-muted-foreground bg-secondary/30 p-3 rounded-lg border border-border">Si cancela con menos tiempo, no se devuelve el crédito.</p>
                   </div>
                 )}
-
                 <div className="space-y-3 pt-4 border-t border-border">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-bold flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-primary" /> Apto Físico Obligatorio
-                    </label>
+                    <label className="text-sm font-bold flex items-center gap-2"><AlertCircle className="h-4 w-4 text-primary" /> Apto Físico Obligatorio</label>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" className="sr-only peer" checked={reglas.pideAptoFisico} onChange={e => setReglas({...reglas, pideAptoFisico: e.target.checked})} />
                       <div className="w-11 h-6 bg-secondary rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
@@ -515,24 +524,27 @@ export default function ConfiguracionAdminPage() {
 
       </div>
 
-      {/* MODAL TARIFA */}
+      {/* MODAL EDICIÓN TARIFA */}
       {modalTarifa && tarifaEditando && (
         <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-card border border-border shadow-xl rounded-3xl w-full max-w-md overflow-hidden">
+          <div className="bg-card border border-border shadow-xl rounded-3xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
             <div className="p-6 flex justify-between items-center border-b border-border bg-secondary/10">
-              <h3 className="font-black text-lg uppercase tracking-tight">{tarifaEditando.id ? 'Editar Tarifa' : 'Nueva Tarifa'}</h3>
+              <h3 className="font-black text-lg uppercase tracking-tight flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-primary" />
+                {tarifaEditando.id ? 'Editar Tarifa' : 'Nueva Tarifa'}
+              </h3>
               <button onClick={() => setModalTarifa(false)} className="hover:bg-secondary p-1 rounded-full"><X className="h-5 w-5 text-muted-foreground" /></button>
             </div>
             
             <form onSubmit={guardarTarifa} className="p-6 space-y-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Nombre del Pase / Cuota</label>
-                <input required value={tarifaEditando.nombre} onChange={e => setTarifaEditando({...tarifaEditando, nombre: e.target.value})} className="w-full bg-background border border-border rounded-xl h-12 px-4 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
+                <input required placeholder="Ej: Cuota Individual" value={tarifaEditando.nombre} onChange={e => setTarifaEditando({...tarifaEditando, nombre: e.target.value})} className="w-full bg-background border border-border rounded-xl h-12 px-4 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
               </div>
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Precio en pesos ($)</label>
-                <input type="number" required value={tarifaEditando.precio} onChange={e => setTarifaEditando({...tarifaEditando, precio: e.target.value})} className="w-full bg-background border border-border rounded-xl h-12 px-4 text-lg font-bold focus:border-primary outline-none" />
+                <input type="number" required placeholder="Ej: 15000" value={tarifaEditando.precio} onChange={e => setTarifaEditando({...tarifaEditando, precio: e.target.value})} className="w-full bg-background border border-border rounded-xl h-12 px-4 text-lg font-bold focus:border-primary outline-none" />
               </div>
 
               {!esMensual && (
@@ -542,13 +554,15 @@ export default function ConfiguracionAdminPage() {
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4 border-t border-border">
+              <div className="flex gap-3 pt-4 border-t border-border mt-6">
                 {tarifaEditando.id && (
-                  <Button type="button" variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-white px-3">
-                    <Trash2 className="h-5 w-5" />
+                  <Button type="button" variant="outline" onClick={borrarTarifa} disabled={guardandoTarifa} className="border-destructive text-destructive hover:bg-destructive hover:text-white px-4 h-12 rounded-xl">
+                    {guardandoTarifa ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
                   </Button>
                 )}
-                <Button type="submit" className="flex-1 font-bold uppercase tracking-widest h-12">Guardar Tarifa</Button>
+                <Button type="submit" disabled={guardandoTarifa} className="flex-1 font-black uppercase tracking-widest h-12 rounded-xl">
+                  {guardandoTarifa ? <Loader2 className="h-5 w-5 animate-spin" /> : "Guardar Tarifa"}
+                </Button>
               </div>
             </form>
           </div>

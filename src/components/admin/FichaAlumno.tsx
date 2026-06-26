@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { 
   ArrowLeft, Wallet, CheckCircle2, AlertCircle, 
-  ReceiptText, Banknote, FileText, Download, UploadCloud, Loader2, Trash2, CalendarDays
+  ReceiptText, Banknote, FileText, Download, UploadCloud, Loader2, Trash2, CalendarDays, PauseCircle
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -34,15 +34,17 @@ export default function FichaAlumno({
   const [pestaña, setPestaña] = useState<'perfil' | 'legajo' | 'finanzas' | 'asistencias' | 'familia'>('perfil')
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   
-  // Estados para el Legajo
   const [subiendoDoc, setSubiendoDoc] = useState(false)
   const [borrandoDoc, setBorrandoDoc] = useState<string | null>(null)
 
-  // Estados para la Edición de Vencimiento
   const flex = alumno.datos_flexibles || {}
   const [editandoVencimiento, setEditandoVencimiento] = useState(false)
   const [nuevoVencimiento, setNuevoVencimiento] = useState<number>(flex.dia_vencimiento ? Number(flex.dia_vencimiento) : 10)
   const [guardandoVencimiento, setGuardandoVencimiento] = useState(false)
+
+  // NUEVO: Estado para manejar la pausa de la cuenta
+  const [esPausado, setEsPausado] = useState<boolean>(Boolean(flex.pausado))
+  const [guardandoPausa, setGuardandoPausa] = useState(false)
 
   const esMenor = Boolean(alumno.titular_id)
   const esTutor = alumno.entrena === false
@@ -73,20 +75,15 @@ export default function FichaAlumno({
     try {
       if (!e.target.files || e.target.files.length === 0) return
       setSubiendoDoc(true)
-      
       const file = e.target.files[0]
       const nombreLimpio = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
       const filePath = `${alumno.id}/${Date.now()}-${nombreLimpio}` 
-
       const { error: uploadError } = await supabase.storage.from('documentos').upload(filePath, file)
       if (uploadError) throw uploadError
-
       const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(filePath)
-      
       const nuevoDoc = { id: `doc-${Date.now()}`, nombre: file.name, url: publicUrl, fecha: new Date().toISOString() }
       const nuevosDocs = [nuevoDoc, ...(flex.documentos || [])]
       const nuevosFlex = { ...flex, documentos: nuevosDocs }
-
       await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
       toast.success("Documento adjuntado correctamente.")
       onSubirArchivo()
@@ -101,13 +98,10 @@ export default function FichaAlumno({
     try {
       if (!confirm("¿Eliminar este documento del legajo?")) return
       setBorrandoDoc(docId)
-      
       const filePath = docUrl.split('/documentos/')[1]
       if (filePath) await supabase.storage.from('documentos').remove([filePath])
-
       const nuevosDocs = (flex.documentos || []).filter((doc: any) => doc.id !== docId)
       const nuevosFlex = { ...flex, documentos: nuevosDocs }
-
       await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
       toast.success("Documento eliminado.")
       onSubirArchivo()
@@ -118,17 +112,13 @@ export default function FichaAlumno({
     }
   }
 
-  // --- LÓGICA DE ACTUALIZACIÓN DEL VENCIMIENTO FAMILIAR ---
   const handleGuardarVencimiento = async () => {
     try {
       setGuardandoVencimiento(true)
-      
-      // 1. Guardamos al titular actual
       const nuevosFlex = { ...flex, dia_vencimiento: nuevoVencimiento }
       const { error: err1 } = await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
       if (err1) throw err1
 
-      // 2. Si no es menor, buscamos si tiene hijos/as a cargo y les cambiamos el día también
       if (!esMenor) {
         const { data: hijos } = await supabase.from('usuarios').select('id, datos_flexibles').eq('titular_id', alumno.id)
         if (hijos && hijos.length > 0) {
@@ -146,11 +136,30 @@ export default function FichaAlumno({
       }
 
       setEditandoVencimiento(false)
-      onSubirArchivo() // Refresca la UI
+      onSubirArchivo() 
     } catch (error: any) {
       toast.error("Error al actualizar la fecha: " + error.message)
     } finally {
       setGuardandoVencimiento(false)
+    }
+  }
+
+  // NUEVA FUNCIÓN: Pausar / Reactivar Alumno
+  const handleTogglePausa = async () => {
+    try {
+      setGuardandoPausa(true)
+      const nuevoEstado = !esPausado
+      const nuevosFlex = { ...flex, pausado: nuevoEstado }
+      
+      await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
+      
+      setEsPausado(nuevoEstado)
+      toast.success(nuevoEstado ? "Cuenta pausada correctamente. No sumará deuda." : "Cuenta reactivada. Sus vencimientos vuelven a correr.")
+      onSubirArchivo() // Usamos este callback para forzar el refresh del padre
+    } catch (error: any) {
+      toast.error("Error al pausar la cuenta.")
+    } finally {
+      setGuardandoPausa(false)
     }
   }
 
@@ -174,7 +183,6 @@ export default function FichaAlumno({
 
       <div className="pt-4">
         
-        {/* PESTAÑA 1: PERFIL */}
         {pestaña === 'perfil' && (
           <TabPerfil 
             alumno={alumno} 
@@ -188,9 +196,9 @@ export default function FichaAlumno({
           />
         )}
 
-        {/* PESTAÑA 2: LEGAJO DIGITAL */}
         {pestaña === 'legajo' && (
           <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in">
+            {/* CÓDIGO LEGAJO... */}
             <Card className="border-border shadow-sm bg-card rounded-[2.5rem] overflow-hidden">
               <div className="p-5 border-b border-border bg-secondary/10 flex items-center justify-between">
                 <div className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /><h3 className="font-black text-sm uppercase tracking-widest text-foreground">Legajo Médico y Legal</h3></div>
@@ -245,21 +253,26 @@ export default function FichaAlumno({
         {/* PESTAÑA 3: ESTADO DE CUENTA */}
         {pestaña === 'finanzas' && (
           <div className="max-w-4xl mx-auto space-y-6 w-full animate-in fade-in">
-            <Card className={`border-2 shadow-md bg-card rounded-[2.5rem] overflow-hidden ${alumno.estado_cuota === 'al_dia' ? 'border-border' : 'border-destructive/40'}`}>
-             <div className={`p-6 border-b flex items-center gap-3 ${alumno.estado_cuota === 'al_dia' ? 'bg-secondary/10 border-border' : 'bg-destructive/10 border-destructive/20 text-destructive'}`}>
+            
+            {/* TARJETA FINANCIERA (AHORA REACCIONA A PAUSADO) */}
+            <Card className={`border-2 shadow-md bg-card rounded-[2.5rem] overflow-hidden transition-colors ${esPausado ? 'border-amber-200' : (alumno.estado_cuota === 'al_dia' ? 'border-border' : 'border-destructive/40')}`}>
+              <div className={`p-6 border-b flex items-center gap-3 transition-colors ${esPausado ? 'bg-amber-50/50 border-amber-100 text-amber-700' : (alumno.estado_cuota === 'al_dia' ? 'bg-secondary/10 border-border text-foreground' : 'bg-destructive/10 border-destructive/20 text-destructive')}`}>
                 <Wallet className="h-6 w-6" />
                 <h3 className="text-xl font-black uppercase tracking-tighter italic">Situación Financiera</h3>
               </div>
               <CardContent className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 
-                {/* COLUMNA IZQUIERDA: ESTADO Y VENCIMIENTO */}
                 <div className="flex flex-col gap-5 w-full md:w-auto">
                   {modeloNegocio === 'reservas' ? (
                     <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Créditos ({alumno.nombre})</p><p className="text-7xl font-black text-primary">{alumno.creditos_clases || 0}</p></div>
                   ) : (
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Membresía</p>
-                      {alumno.estado_cuota === 'al_dia' ? (
+                      
+                      {/* ESTADOS: PAUSADO, AL DÍA o VENCIDA */}
+                      {esPausado ? (
+                        <div className="flex items-center gap-3"><PauseCircle className="h-12 w-12 text-amber-500" /><p className="text-3xl font-black text-amber-600 uppercase tracking-tight">Pausada</p></div>
+                      ) : alumno.estado_cuota === 'al_dia' ? (
                         <div className="flex items-center gap-3"><CheckCircle2 className="h-12 w-12 text-emerald-500" /><p className="text-3xl font-black text-foreground uppercase tracking-tight">Al Día</p></div>
                       ) : (
                         <div className="flex items-center gap-3"><AlertCircle className="h-12 w-12 text-destructive animate-pulse" /><p className="text-3xl font-black text-destructive uppercase tracking-tight">Vencida</p></div>
@@ -267,7 +280,6 @@ export default function FichaAlumno({
                     </div>
                   )}
 
-                  {/* NUEVO MÓDULO: CONFIGURACIÓN DE DÍA DE VENCIMIENTO */}
                   {modeloNegocio === 'mensual' && (
                     <div className="p-4 bg-secondary/30 rounded-2xl border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
                       <div className="flex items-start gap-3">
@@ -275,15 +287,12 @@ export default function FichaAlumno({
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vencimiento Personalizado</p>
                           {!editandoVencimiento ? (
-                            <p className="text-sm font-black text-foreground mt-0.5">
-                              Día {flex.dia_vencimiento || 10} de cada mes
-                            </p>
+                            <p className="text-sm font-black text-foreground mt-0.5">Día {flex.dia_vencimiento || 10} de cada mes</p>
                           ) : (
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-xs font-bold text-muted-foreground">Día</span>
                               <input 
-                                type="number" 
-                                min="1" max="31" 
+                                type="number" min="1" max="31" 
                                 value={nuevoVencimiento} 
                                 onChange={(e) => setNuevoVencimiento(Number(e.target.value))}
                                 className="w-16 h-8 text-center font-bold bg-background border border-border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
@@ -307,9 +316,32 @@ export default function FichaAlumno({
                       </div>
                     </div>
                   )}
+
+                  {/* NUEVO MÓDULO: BOTÓN PAUSAR */}
+                  {modeloNegocio === 'mensual' && (
+                    <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2 ${esPausado ? 'bg-amber-50 border-amber-200' : 'bg-secondary/10 border-border'}`}>
+                      <div className="flex items-start gap-3">
+                        <PauseCircle className={`h-5 w-5 mt-0.5 ${esPausado ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                        <div>
+                          <p className={`text-[10px] font-black uppercase tracking-widest ${esPausado ? 'text-amber-700' : 'text-muted-foreground'}`}>Estado de la Cuenta</p>
+                          <p className={`text-sm font-bold mt-0.5 ${esPausado ? 'text-amber-900' : 'text-foreground'}`}>
+                            {esPausado ? "Congelada (No genera deuda)" : "Activa (Genera vencimientos)"}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant={esPausado ? "default" : "outline"}
+                        size="sm"
+                        onClick={handleTogglePausa}
+                        disabled={guardandoPausa}
+                        className={`h-8 text-xs font-bold shadow-sm ${esPausado ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'border-border text-foreground hover:bg-secondary'}`}
+                      >
+                        {guardandoPausa ? <Loader2 className="h-3 w-3 animate-spin" /> : (esPausado ? "Reactivar Cuenta" : "Pausar Cuenta")}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
-                {/* COLUMNA DERECHA: BOTÓN DE COBRO */}
                 {!esMenor ? (
                   <Button onClick={onAbrirCobro} className="bg-primary hover:bg-primary/90 font-black uppercase tracking-widest rounded-xl h-14 px-8 shadow-lg w-full md:w-auto shrink-0">
                     Registrar Cobro
@@ -355,12 +387,10 @@ export default function FichaAlumno({
           </div>
         )}
 
-        {/* PESTAÑA 4: GRUPO FAMILIAR */}
         {!esMenor && pestaña === 'familia' && (
           <TabFamilia alumno={alumno} onSubirArchivo={onSubirArchivo} />
         )}
 
-        {/* PESTAÑA 5: ASISTENCIAS */}
         {!esTutor && pestaña === 'asistencias' && (
           <div className="max-w-3xl mx-auto animate-in fade-in">
             <Card className="border-border shadow-sm bg-card rounded-[2rem] overflow-hidden">
