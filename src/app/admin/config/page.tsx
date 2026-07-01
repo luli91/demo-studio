@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase"
 import { 
   Settings, CreditCard, Clock, Plus, Pencil, Trash2, Save, X, 
   AlertCircle, Building2, UploadCloud, Loader2, Image as ImageIcon, 
-  Megaphone, CalendarDays 
+  Megaphone, CalendarDays, Copy, ExternalLink 
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,13 +16,15 @@ export default function ConfiguracionAdminPage() {
   const modeloNegocio = "mensual" 
   const esMensual = modeloNegocio === "mensual"
 
-  const [pestaña, setPestaña] = useState<'institucional' | 'cartelera' | 'tarifas' | 'reglas'>('institucional')
+  const [pestañaActiva, setPestañaActiva] = useState<'institucional' | 'cartelera' | 'tarifas' | 'reglas'>('institucional')
   const [academiaId, setAcademiaId] = useState<string | null>(null)
+  const [origenWeb, setOrigenWeb] = useState("")
   
   const [infoAcademia, setInfoAcademia] = useState({
     nombre_largo: "",
     nombre_corto: "",
     siglas: "",
+    slug: "", 
     admin_nombre: "",
     logo_url: "",
     firma_url: "",
@@ -39,7 +41,6 @@ export default function ConfiguracionAdminPage() {
   const [publicandoEvento, setPublicandoEvento] = useState(false)
   const [borrandoEventoId, setBorrandoEventoId] = useState<string | null>(null)
 
-  // NUEVO ESTADO DE TARIFAS (Vacío al inicio)
   const [tarifas, setTarifas] = useState<any[]>([])
   const [reglas, setReglas] = useState({ horasCancelacion: 5, pideAptoFisico: true })
   
@@ -48,6 +49,9 @@ export default function ConfiguracionAdminPage() {
   const [guardandoTarifa, setGuardandoTarifa] = useState(false)
 
   useEffect(() => {
+    // Guardamos la URL base (localhost o la web real) para armar el link
+    setOrigenWeb(window.location.origin)
+
     const cargarConfiguracion = async () => {
       try {
         const { data, error } = await supabase.from('academias').select('*').limit(1).single()
@@ -58,13 +62,13 @@ export default function ConfiguracionAdminPage() {
             nombre_largo: data.nombre || "",
             nombre_corto: data.nombre_corto || data.nombre || "",
             siglas: data.siglas || "",
+            slug: data.slug || "", 
             admin_nombre: data.admin_nombre || "Administración",
             logo_url: data.logo_url || "",
             firma_url: data.firma_url || "",
             eventos_cartelera: data.eventos_cartelera || []
           })
 
-          // CARGAR TARIFAS DESDE SUPABASE
           const { data: dataTarifas } = await supabase.from('tarifas').select('*').eq('academia_id', data.id).order('precio', { ascending: true })
           if (dataTarifas) setTarifas(dataTarifas)
         }
@@ -112,30 +116,48 @@ export default function ConfiguracionAdminPage() {
     if (!academiaId) return
     setGuardandoTextos(true)
     try {
+      // Limpiamos el slug por las dudas (sin espacios, en minúsculas)
+      const slugLimpio = infoAcademia.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+
       const { error } = await supabase.from('academias').update({
         nombre: infoAcademia.nombre_largo,
         nombre_corto: infoAcademia.nombre_corto,
         siglas: infoAcademia.siglas,
+        slug: slugLimpio, 
         admin_nombre: infoAcademia.admin_nombre,
       }).eq('id', academiaId)
 
-      if (error) throw error
+      if (error) {
+        if (error.code === '23505') throw new Error("Ese Identificador de Link ya está en uso por otra academia.")
+        throw error
+      }
+      
+      setInfoAcademia(prev => ({...prev, slug: slugLimpio}))
       toast.success("Textos institucionales guardados con éxito.")
     } catch (error: any) {
-      toast.error("Error al guardar textos.")
+      toast.error(error.message || "Error al guardar textos.")
     } finally {
       setGuardandoTextos(false)
     }
   }
 
+  // --- FUNCIÓN PARA COPIAR EL LINK ---
+  const copiarLinkRegistro = () => {
+    if (!infoAcademia.slug) {
+      toast.error("Primero tenés que guardar un identificador de link.")
+      return
+    }
+    const link = `${origenWeb}/registro?club=${infoAcademia.slug}`
+    navigator.clipboard.writeText(link)
+    toast.success("¡Link de registro copiado al portapapeles!")
+  }
+
   const handlePublicarEvento = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!academiaId || !nuevoEvento.titulo) return
-    
     setPublicandoEvento(true)
     try {
       let imagenUrl = ""
-      
       if (archivoEvento) {
         const fileExt = archivoEvento.name.split('.').pop()
         const nombreLimpio = archivoEvento.name.replace(/[^a-zA-Z0-9.-]/g, '_')
@@ -145,24 +167,14 @@ export default function ConfiguracionAdminPage() {
         const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
         imagenUrl = data.publicUrl
       }
-
-      const eventoFinal = {
-        id: `ev-${Date.now()}`,
-        titulo: nuevoEvento.titulo,
-        descripcion: nuevoEvento.descripcion,
-        imagen_url: imagenUrl,
-        fecha: new Date().toISOString()
-      }
-
+      const eventoFinal = { id: `ev-${Date.now()}`, titulo: nuevoEvento.titulo, descripcion: nuevoEvento.descripcion, imagen_url: imagenUrl, fecha: new Date().toISOString() }
       const nuevaLista = [eventoFinal, ...(infoAcademia.eventos_cartelera || [])]
       const { error: updateError } = await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
       if (updateError) throw updateError
-
       setInfoAcademia(prev => ({ ...prev, eventos_cartelera: nuevaLista }))
       setNuevoEvento({ titulo: "", descripcion: "" })
       setArchivoEvento(null)
       toast.success("¡Evento publicado!")
-
     } catch (error: any) {
       toast.error("Error al publicar evento.")
     } finally {
@@ -173,18 +185,15 @@ export default function ConfiguracionAdminPage() {
   const handleBorrarEvento = async (idAviso: string, urlImagen: string) => {
     if (!academiaId) return
     if (!confirm("¿Eliminar este aviso de la cartelera?")) return
-    
     setBorrandoEventoId(idAviso)
     try {
       if (urlImagen) {
         const filePath = urlImagen.split('/avatars/')[1]
         if (filePath) await supabase.storage.from('avatars').remove([filePath])
       }
-
       const nuevaLista = (infoAcademia.eventos_cartelera || []).filter((ev: any) => ev.id !== idAviso)
       const { error } = await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
       if (error) throw error
-
       setInfoAcademia(prev => ({ ...prev, eventos_cartelera: nuevaLista }))
       toast.success("Aviso eliminado.")
     } catch (error: any) {
@@ -194,44 +203,20 @@ export default function ConfiguracionAdminPage() {
     }
   }
 
-  // --- LÓGICA DE TARIFAS CONECTADA A SUPABASE ---
-  const abrirModalNueva = () => { 
-    setTarifaEditando({ id: null, nombre: "", precio: "", tipo: esMensual ? "mensual" : "creditos", creditos: "" })
-    setModalTarifa(true) 
-  }
-  
-  const abrirModalEditar = (tarifa: any) => { 
-    setTarifaEditando({ ...tarifa })
-    setModalTarifa(true) 
-  }
-
+  const abrirModalNueva = () => { setTarifaEditando({ id: null, nombre: "", precio: "", tipo: esMensual ? "mensual" : "creditos", creditos: "" }); setModalTarifa(true) }
+  const abrirModalEditar = (tarifa: any) => { setTarifaEditando({ ...tarifa }); setModalTarifa(true) }
   const guardarTarifa = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!academiaId) return
     setGuardandoTarifa(true)
-
     try {
       if (tarifaEditando.id) {
-        // ACTUALIZAR TARIFA EXISTENTE
-        const { error } = await supabase.from('tarifas').update({
-          nombre: tarifaEditando.nombre,
-          precio: Number(tarifaEditando.precio),
-          creditos: tarifaEditando.creditos ? Number(tarifaEditando.creditos) : null
-        }).eq('id', tarifaEditando.id)
-        
+        const { error } = await supabase.from('tarifas').update({ nombre: tarifaEditando.nombre, precio: Number(tarifaEditando.precio), creditos: tarifaEditando.creditos ? Number(tarifaEditando.creditos) : null }).eq('id', tarifaEditando.id)
         if (error) throw error
         setTarifas(tarifas.map(t => t.id === tarifaEditando.id ? { ...t, ...tarifaEditando, precio: Number(tarifaEditando.precio) } : t))
         toast.success("Tarifa actualizada.")
       } else {
-        // CREAR NUEVA TARIFA
-        const { data, error } = await supabase.from('tarifas').insert({
-          academia_id: academiaId,
-          nombre: tarifaEditando.nombre,
-          precio: Number(tarifaEditando.precio),
-          tipo: esMensual ? 'mensual' : 'creditos',
-          creditos: esMensual ? null : Number(tarifaEditando.creditos)
-        }).select().single()
-        
+        const { data, error } = await supabase.from('tarifas').insert({ academia_id: academiaId, nombre: tarifaEditando.nombre, precio: Number(tarifaEditando.precio), tipo: esMensual ? 'mensual' : 'creditos', creditos: esMensual ? null : Number(tarifaEditando.creditos) }).select().single()
         if (error) throw error
         if (data) setTarifas([...tarifas, data])
         toast.success("Nueva tarifa creada.")
@@ -243,16 +228,13 @@ export default function ConfiguracionAdminPage() {
       setGuardandoTarifa(false)
     }
   }
-
   const borrarTarifa = async () => {
     if (!tarifaEditando?.id) return
     if (!confirm("¿Eliminar definitivamente esta tarifa?")) return
-    
     setGuardandoTarifa(true)
     try {
       const { error } = await supabase.from('tarifas').delete().eq('id', tarifaEditando.id)
       if (error) throw error
-      
       setTarifas(tarifas.filter(t => t.id !== tarifaEditando.id))
       toast.success("Tarifa eliminada.")
       setModalTarifa(false)
@@ -278,16 +260,16 @@ export default function ConfiguracionAdminPage() {
       </div>
 
       <div className="flex gap-2 border-b border-border overflow-x-auto pb-px scrollbar-hide">
-        <button onClick={() => setPestaña('institucional')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestaña === 'institucional' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+        <button onClick={() => setPestañaActiva('institucional')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'institucional' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
           <Building2 className="h-4 w-4" /> Institucional
         </button>
-        <button onClick={() => setPestaña('cartelera')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestaña === 'cartelera' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+        <button onClick={() => setPestañaActiva('cartelera')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'cartelera' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
           <Megaphone className="h-4 w-4" /> Cartelera Digital
         </button>
-        <button onClick={() => setPestaña('tarifas')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestaña === 'tarifas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+        <button onClick={() => setPestañaActiva('tarifas')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'tarifas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
           <CreditCard className="h-4 w-4" /> Tarifas
         </button>
-        <button onClick={() => setPestaña('reglas')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestaña === 'reglas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+        <button onClick={() => setPestañaActiva('reglas')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'reglas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
           <AlertCircle className="h-4 w-4" /> Reglas Operativas
         </button>
       </div>
@@ -295,13 +277,13 @@ export default function ConfiguracionAdminPage() {
       <div className="pt-2">
 
         {/* PESTAÑA INSTITUCIONAL */}
-        {pestaña === 'institucional' && (
+        {pestañaActiva === 'institucional' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-2">
             <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card flex flex-col">
               <div className="px-6 py-5 border-b border-border bg-secondary/10 flex justify-between items-center">
-                <h2 className="font-black text-foreground uppercase tracking-tight">Identidad y Recibos PDF</h2>
+                <h2 className="font-black text-foreground uppercase tracking-tight">Identidad y Accesos</h2>
                 <Button onClick={handleGuardarTextosInstitucionales} disabled={guardandoTextos} size="sm" className="font-bold uppercase tracking-widest text-xs">
-                  {guardandoTextos ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-2" />} Guardar Textos
+                  {guardandoTextos ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-2" />} Guardar Cambios
                 </Button>
               </div>
               <CardContent className="p-6">
@@ -321,6 +303,22 @@ export default function ConfiguracionAdminPage() {
                         <input type="text" value={infoAcademia.siglas} onChange={e => setInfoAcademia({...infoAcademia, siglas: e.target.value})} className="w-full bg-background border border-border rounded-xl h-10 px-3 text-sm outline-none focus:border-primary" />
                       </div>
                     </div>
+                    
+                    {/* ACÁ ESTÁ EL CAMPO NUEVO DEL SLUG */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-1">
+                        <ExternalLink className="h-3 w-3" /> Identificador de Link (Slug)
+                      </label>
+                      <input 
+                        type="text" 
+                        value={infoAcademia.slug} 
+                        onChange={e => setInfoAcademia({...infoAcademia, slug: e.target.value})} 
+                        placeholder="ej: mi-club-barrio" 
+                        className="w-full bg-primary/5 border border-primary/20 rounded-xl h-10 px-3 text-sm outline-none focus:border-primary font-bold text-primary" 
+                      />
+                      <p className="text-[10px] text-muted-foreground italic mt-1">Sin espacios ni mayúsculas. Este nombre aparecerá en tu link de registro.</p>
+                    </div>
+
                     <div className="space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Firma a nombre de:</label>
                       <input type="text" value={infoAcademia.admin_nombre} onChange={e => setInfoAcademia({...infoAcademia, admin_nombre: e.target.value})} placeholder="Ej: Lic. Florencia Admin" className="w-full bg-background border border-border rounded-xl h-10 px-3 text-sm outline-none focus:border-primary" />
@@ -359,13 +357,38 @@ export default function ConfiguracionAdminPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* CAJA DEL ENLACE DE INVITACIÓN */}
+                <div className="mt-8 p-5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-2xl space-y-3">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-500 flex items-center gap-2">
+                    <ExternalLink className="h-4 w-4" /> Enlace Público de Registro
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input 
+                      readOnly 
+                      value={infoAcademia.slug ? `${origenWeb}/registro?club=${infoAcademia.slug}` : "Guardá un Identificador (Slug) primero"} 
+                      className="w-full bg-white dark:bg-background border border-emerald-200 dark:border-emerald-800 rounded-xl h-11 px-4 text-sm font-medium text-emerald-900 dark:text-emerald-100 outline-none" 
+                    />
+                    <Button 
+                      onClick={copiarLinkRegistro} 
+                      disabled={!infoAcademia.slug}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 px-6 rounded-xl shrink-0"
+                    >
+                      <Copy className="h-4 w-4 mr-2" /> Copiar Link
+                    </Button>
+                  </div>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                    Compartí este enlace por WhatsApp o Instagram. Los alumnos que ingresen por acá quedarán registrados directamente en tu directorio.
+                  </p>
+                </div>
+
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* PESTAÑA CARTELERA */}
-        {pestaña === 'cartelera' && (
+        {/* ================= PESTAÑA CARTELERA ================= */}
+        {pestañaActiva === 'cartelera' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-bottom-2">
             <div className="space-y-6">
               <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card border-amber-500/30">
@@ -442,8 +465,8 @@ export default function ConfiguracionAdminPage() {
           </div>
         )}
 
-        {/* PESTAÑA TARIFAS */}
-        {pestaña === 'tarifas' && (
+        {/* ================= PESTAÑA TARIFAS ================= */}
+        {pestañaActiva === 'tarifas' && (
           <div className="animate-in slide-in-from-bottom-2">
             <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card">
               <div className="px-6 py-5 border-b border-border flex justify-between items-center bg-secondary/10">
@@ -487,8 +510,8 @@ export default function ConfiguracionAdminPage() {
           </div>
         )}
 
-        {/* PESTAÑA REGLAS */}
-        {pestaña === 'reglas' && (
+        {/* ================= PESTAÑA REGLAS ================= */}
+        {pestañaActiva === 'reglas' && (
           <div className="max-w-2xl animate-in slide-in-from-bottom-2">
             <Card className="border-border shadow-sm rounded-[2rem] overflow-hidden bg-card">
               <div className="px-6 py-5 border-b border-border bg-secondary/10">

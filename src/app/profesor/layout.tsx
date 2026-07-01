@@ -1,100 +1,112 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { CalendarCheck, DollarSign, LogOut, Menu, User } from "lucide-react"
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase"
+import { LayoutDashboard, Users, CalendarDays, Image as ImageIcon, Wallet, Settings, LogOut, Menu, X, GraduationCap } from "lucide-react"
 
-const OPCIONES_PROFE = [
-  { titulo: "Mi Grilla", icono: CalendarCheck, href: "/profesor" },
-  { titulo: "Mi actividad", icono: DollarSign, href: "/profesor/actividad" },
-  { titulo: "Mi Perfil", icono: User, href: "/profesor/perfil" },
-]
-
-export default function ProfesorLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
   const [menuAbierto, setMenuAbierto] = useState(false)
+
+  // ESTADO DINÁMICO: Por defecto es "mensual" (oculta la grilla)
+  const [modeloNegocio, setModeloNegocio] = useState<string>("mensual")
+
+  useEffect(() => {
+    const fetchConfiguracion = async () => {
+      // Vamos a la BD y leemos si esta academia usa reservas o cuota fija
+      const { data } = await supabase.from('academias').select('usa_reservas').limit(1).single()
+      
+      if (data && data.usa_reservas === true) {
+        setModeloNegocio("reservas") // Si usa reservas, activamos la Grilla
+      }
+    }
+    fetchConfiguracion()
+  }, [supabase])
 
   const handleCerrarSesion = async () => {
     await supabase.auth.signOut()
     router.push("/login")
   }
 
-  return (
-    <div className="flex min-h-screen bg-secondary/10 text-foreground">
+  // MENÚ INTELIGENTE
+  const menuItems = [
+    { label: "Dashboard", path: "/admin", icon: <LayoutDashboard className="h-5 w-5" /> },
+    { label: "Directorio", path: "/admin/alumnos", icon: <Users className="h-5 w-5" /> },
+    { label: "Staff", path: "/admin/staff", icon: <GraduationCap className="h-5 w-5" /> },
+    
+    // Inyección dinámica: Solo se agrega si el modelo NO es mensual
+    ...(modeloNegocio !== 'mensual' 
+      ? [{ label: "Grilla", path: "/admin/clases", icon: <CalendarDays className="h-5 w-5" /> }] 
+      : []),
       
-      <aside className="hidden w-64 flex-col border-r border-border bg-card lg:flex shadow-sm z-10">
-        <div className="flex h-16 items-center border-b border-border px-6">
-          <span className="text-lg font-black tracking-tight text-primary uppercase">Portal Profesor</span>
+    { label: "Multimedia", path: "/admin/multimedia", icon: <ImageIcon className="h-5 w-5" /> },
+    { label: "Finanzas", path: "/admin/finanzas", icon: <Wallet className="h-5 w-5" /> },
+    { label: "Configuración", path: "/admin/config", icon: <Settings className="h-5 w-5" /> },
+  ]
+
+  return (
+    <div className="flex flex-col md:flex-row min-h-screen bg-background text-foreground font-sans">
+      
+      <button 
+        className="md:hidden fixed top-4 left-4 z-50 bg-primary p-2 rounded-md text-primary-foreground shadow-lg"
+        onClick={() => setMenuAbierto(!menuAbierto)}
+      >
+        {menuAbierto ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+      </button>
+
+      {menuAbierto && (
+        <div 
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 md:hidden" 
+          onClick={() => setMenuAbierto(false)}
+        />
+      )}
+
+      <aside className={`fixed top-0 left-0 h-screen w-64 bg-slate-950 text-slate-50 p-8 flex flex-col z-40 transform transition-transform duration-300 ${menuAbierto ? "translate-x-0" : "-translate-x-full"} md:relative md:translate-x-0 shadow-xl border-r border-border/10`}>
+        <div className="mb-10 flex flex-col items-center text-center">
+          <div className="h-12 w-12 bg-primary/20 text-primary rounded-xl flex items-center justify-center mb-3">
+            <LayoutDashboard className="h-6 w-6" />
+          </div>
+          <h2 className="text-xl font-black tracking-tight text-white leading-none uppercase mt-1">
+            MANAGER<span className="text-primary font-black ml-1">PRO</span>
+          </h2>
+          <p className="text-[10px] text-slate-400 mt-2 uppercase tracking-widest font-bold italic">Panel de Comando</p>
         </div>
-        <nav className="flex flex-1 flex-col gap-2 p-4">
-          {OPCIONES_PROFE.map((item) => {
-            const activo = pathname === item.href
-            return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
-                  activo ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
-                <item.icono className="h-5 w-5" />
-                {item.titulo}
-              </Link>
-            )
-          })}
+
+        <nav className="flex-1 space-y-2 overflow-y-auto">
+          {menuItems.map((item) => (
+            <Link 
+              key={item.path} 
+              href={item.path}
+              onClick={() => setMenuAbierto(false)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${pathname === item.path ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+            >
+              {item.icon}
+              <span className="font-bold text-sm tracking-tight">{item.label}</span>
+            </Link>
+          ))}
         </nav>
-        <div className="border-t border-border p-4">
-          <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive font-bold" onClick={handleCerrarSesion}>
+
+        <div className="mt-auto pt-6 border-t border-white/5">
+          <button 
+            onClick={handleCerrarSesion}
+            className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-muted-foreground hover:bg-white/5 hover:text-white transition-colors font-bold text-sm"
+          >
             <LogOut className="h-5 w-5" />
-            Cerrar sesión
-          </Button>
+            <span>Cerrar sesión</span>
+          </button>
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col overflow-hidden relative">
-        <header className="flex h-16 items-center justify-between border-b border-border bg-card px-4 lg:hidden sticky top-0 z-40 shadow-sm">
-          <span className="text-lg font-black text-primary uppercase">Portal Profesor</span>
-          <Button variant="ghost" size="icon" onClick={() => setMenuAbierto(!menuAbierto)} className="text-primary">
-            <Menu className="h-6 w-6" />
-          </Button>
-        </header>
-
-        {menuAbierto && (
-          <div className="border-b border-border bg-card p-4 lg:hidden z-50 absolute top-16 w-full shadow-lg animate-in slide-in-from-top-2">
-            <nav className="flex flex-col gap-2">
-              {OPCIONES_PROFE.map((item) => {
-                const activo = pathname === item.href
-                return (
-                  <Link 
-                    key={item.href} 
-                    href={item.href}
-                    onClick={() => setMenuAbierto(false)}
-                    className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
-                      activo ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                    }`}
-                  >
-                    <item.icono className="h-5 w-5" />
-                    {item.titulo}
-                  </Link>
-                )
-              })}
-              <Button variant="ghost" className="mt-2 justify-start gap-3 text-destructive font-bold px-4" onClick={handleCerrarSesion}>
-                <LogOut className="h-5 w-5" />
-                Cerrar sesión
-              </Button>
-            </nav>
-          </div>
-        )}
-
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-transparent">
+      <main className="flex-1 p-4 md:p-8 pt-20 md:pt-8 overflow-y-auto h-screen bg-background">
+        <div className="max-w-6xl mx-auto">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
+
     </div>
   )
 }

@@ -1,20 +1,35 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Eye, EyeOff, Calendar } from "lucide-react"
+import { Loader2, Eye, EyeOff, Calendar, AlertCircle, CheckCircle2, Building2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { createClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ZONAS_AMBA } from "@/lib/zonas" 
+import { Card, CardContent } from "@/components/ui/card"
+import { ZONAS_AMBA } from "@/lib/zonas"
 
 export default function RegistroPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>}>
+      <FormularioRegistro />
+    </Suspense>
+  )
+}
+
+function FormularioRegistro() {
   const router = useRouter()
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  
+  const slugClub = searchParams.get("club") 
+
+  const [cargandoAcademia, setCargandoAcademia] = useState(true)
+  const [academia, setAcademia] = useState<any>(null)
 
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
@@ -32,18 +47,29 @@ export default function RegistroPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [cargando, setCargando] = useState(false)
 
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback` 
+  useEffect(() => {
+    const buscarAcademia = async () => {
+      if (!slugClub) {
+        setCargandoAcademia(false)
+        return
       }
-    })
-    if (error) toast.error("Error al conectar con Google.")
-  }
+
+      const { data } = await supabase
+        .from('academias')
+        .select('id, nombre, logo_url')
+        .eq('slug', slugClub)
+        .single()
+
+      if (data) setAcademia(data)
+      setCargandoAcademia(false)
+    }
+
+    buscarAcademia()
+  }, [slugClub, supabase])
 
   const handleRegistro = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!academia) return
     
     if (password.length < 6) {
       toast.error("La contraseña debe tener al menos 6 caracteres")
@@ -66,19 +92,34 @@ export default function RegistroPage() {
         fecha_nacimiento: fechaNacimiento
       }
 
-      const { error: authError } = await supabase.auth.signUp({
+      // GUARDAMOS EN LA BÓVEDA DE AUTH
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: nombreArmado,
             telefono: telefono,
-            datos_flexibles: datosFlexiblesPayload
           }
         }
       })
 
       if (authError) throw new Error(authError.message)
+      if (!authData.user) throw new Error("No se pudo crear el usuario.")
+
+      // GUARDAMOS EN TU TABLA USUARIOS ATADO AL CLUB
+      const { error: insertError } = await supabase.from('usuarios').upsert({
+        id: authData.user.id,
+        academia_id: academia.id, 
+        nombre: nombreArmado,
+        telefono: telefono,
+        email: email,
+        rol: 'alumno',
+        activa: true,
+        datos_flexibles: datosFlexiblesPayload
+      })
+
+      if (insertError) throw new Error("No se pudo guardar la ficha. Avisá a administración.")
 
       toast.success("¡Cuenta creada con éxito!")
       router.push("/alumno")
@@ -90,28 +131,51 @@ export default function RegistroPage() {
     }
   }
 
+  if (cargandoAcademia) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
+
+  if (!academia) {
+    return (
+      <div className="min-h-screen bg-secondary/10 flex items-center justify-center p-4 w-full">
+        <Card className="w-full max-w-md border-destructive/20 shadow-xl rounded-[2rem]">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="h-20 w-20 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-2">
+              <AlertCircle className="h-10 w-10 text-destructive" />
+            </div>
+            <h1 className="text-2xl font-black uppercase tracking-tight text-destructive">Enlace Inválido</h1>
+            <p className="text-muted-foreground font-medium text-sm">
+              Para registrarte, necesitás el enlace de invitación exacto de tu club o academia. Por favor, pedile el link correcto a la administración.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen w-full bg-background">
       <div className="flex w-full flex-col items-center justify-center p-8 lg:w-1/2 overflow-y-auto">
         <div className="w-full max-w-md space-y-6 my-8">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Crear cuenta</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Completá tu ficha para unirte.</p>
-          </div>
           
-          <Button type="button" variant="outline" className="w-full h-11 font-bold" onClick={handleGoogleLogin}>
-            <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            Registrarse con Google
-          </Button>
+          <div className="text-center space-y-3">
+            {academia.logo_url ? (
+              <img src={academia.logo_url} alt="Logo" className="h-20 w-20 mx-auto rounded-full object-cover border-2 border-primary shadow-md" />
+            ) : (
+              <div className="h-20 w-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/20">
+                <Building2 className="h-10 w-10 text-primary" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-3xl font-black tracking-tight text-foreground uppercase">{academia.nombre}</h1>
+              <p className="mt-1 text-sm font-bold text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1">
+                <CheckCircle2 className="h-4 w-4" /> Academia Verificada
+              </p>
+            </div>
+          </div>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">O completá tu ficha manual</span></div>
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-6">
+            <p className="text-xs font-medium text-primary text-center">
+              Completá tu ficha de inscripción para unirte al directorio oficial del club.
+            </p>
           </div>
 
           <form onSubmit={handleRegistro} className="space-y-6">
@@ -210,7 +274,7 @@ export default function RegistroPage() {
           </form>
 
           <p className="text-center text-sm text-muted-foreground">
-            ¿Ya tenés cuenta? <Link href="/login" className="font-semibold text-primary hover:underline">Iniciá sesión</Link>
+            ¿Ya tenés cuenta? <Link href={`/login?club=${slugClub || ''}`} className="font-semibold text-primary hover:underline">Iniciá sesión</Link>
           </p>
         </div>
       </div>

@@ -1,13 +1,9 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// 🚀 INTERRUPTOR MODO DISEÑO: 
-// Ponelo en 'true' para diseñar libremente. 
-// Ponelo en 'false' cuando conectemos Supabase para activar la seguridad real.
-const MODO_DISENO = true;
+const MODO_DISENO = false;
 
 export async function middleware(request: NextRequest) {
-  // Si estamos diseñando, dejamos pasar todas las rutas sin chequear nada
   if (MODO_DISENO) {
     return NextResponse.next();
   }
@@ -27,69 +23,54 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
+          request.cookies.set({ name, value, ...options })
           response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request: { headers: request.headers },
           })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
+          response.cookies.set({ name, value, ...options })
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
+          request.cookies.set({ name, value: '', ...options })
           response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request: { headers: request.headers },
           })
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
+          response.cookies.set({ name, value: '', ...options })
         },
       },
     }
   )
 
+  // Usamos getUser() que es el método seguro que verifica el token con el servidor
   const { data: { user } } = await supabase.auth.getUser()
+  const pathname = request.nextUrl.pathname
 
-  // 1. Si no hay usuario y trata de entrar a rutas privadas -> al Login
-  const isProtectedRoute = 
-    request.nextUrl.pathname.startsWith('/admin') || 
-    request.nextUrl.pathname.startsWith('/profesor') || 
-    request.nextUrl.pathname.startsWith('/alumno') 
+  const esRutaProtegida = 
+    pathname.startsWith('/admin') || 
+    pathname.startsWith('/profesor') || 
+    pathname.startsWith('/alumno')
 
-  if (!user && isProtectedRoute) {
+  // CASO 1: No hay sesión y quiere entrar a una ruta privada -> Al Login
+  if (!user && esRutaProtegida) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // 2. Si hay usuario, verificamos el ROL para seguridad de rutas
+  // CASO 2: Hay sesión, vamos a verificar los roles reales en la tabla 'usuarios'
   if (user) {
-    const { data: perfil } = await supabase
-      .from('perfiles')
+    const { data: usuario } = await supabase
+      .from('usuarios') // <--- CORREGIDO: apuntando a tu tabla real
       .select('rol')
       .eq('id', user.id)
       .single()
 
-    const rol = perfil?.rol
+    const rol = usuario?.rol
 
-    // Si intenta entrar a PROFE y no es profe ni admin -> al panel de alumnos
-    if (request.nextUrl.pathname.startsWith('/profesor') && rol !== 'profe' && rol !== 'admin') {
-      return NextResponse.redirect(new URL('/alumno', request.url)) 
+    // Si un alumno quiere entrar a /admin o /profesor -> Lo mandamos a su panel
+    if ((pathname.startsWith('/admin') && rol !== 'admin') || 
+        (pathname.startsWith('/profesor') && rol !== 'admin' && rol !== 'profesor')) {
+      return NextResponse.redirect(new URL('/alumno', request.url))
     }
+    
+    // Si un admin o profe quiere entrar a /alumno por error, lo dejamos o manejamos según prefieras
   }
 
   return response
@@ -97,6 +78,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    // Protege todo menos archivos estáticos, imágenes y el favicon
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
