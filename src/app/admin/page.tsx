@@ -162,7 +162,7 @@ export default function AdminDashboardMainPage() {
           <p className="text-slate-500 text-sm font-medium mt-1">Métricas y desempeño mensual de tu academia.</p>
         </div>
         <div className="flex gap-3">
-          <Link href="/admin/finanzas"><Button variant="outline" className="h-11 border-emerald-600 text-emerald-600 font-bold px-6 shadow-sm"><Wallet className="h-4 w-4 mr-2" /> Ir a Tesorería</Button></Link>
+          <Link href="/admin/finanzas"><Button variant="outline" className="h-11 border-emerald-600 text-emerald-600 font-bold px-6 shadow-sm"><Wallet className="h-4 w-4 mr-2" /> Ir a Finanzas</Button></Link>
           <Link href="/admin/alumnos"><Button className="h-11 bg-slate-900 hover:bg-slate-800 text-white font-bold px-6 shadow-md"><PlusCircle className="h-4 w-4 mr-2" /> Registrar Cobro</Button></Link>
         </div>
       </div>

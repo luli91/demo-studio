@@ -95,11 +95,9 @@ export default function AdminAlumnosPage() {
       const anioActual = hoy.getFullYear()
 
       const alumnasOficiales = (dataOficial || []).map((u: any) => {
-        // SOLUCIÓN 1: Si es menor, vincula también los pagos que se registraron a nombre de su tutor
         const pagosAlumno = (dataPagos || []).filter(p => p.alumno_id === u.id || (u.titular_id && p.alumno_id === u.titular_id))
         const flex = u.datos_flexibles || {}
         
-        // SOLUCIÓN 2: Si es menor, busca el día de vencimiento personalizado de su tutor
         let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
         if (u.titular_id) {
           const tutor = (dataOficial || []).find((t: any) => t.id === u.titular_id)
@@ -108,7 +106,6 @@ export default function AdminAlumnosPage() {
           }
         }
         
-        // El sistema verifica si hay un pago de "CUOTA" en el mes corriente
         const tienePagoEsteMes = pagosAlumno.some((p: any) => {
           const fechaPago = new Date(p.fecha)
           return p.concepto_categoria === 'CUOTA' && fechaPago.getMonth() === mesActual && fechaPago.getFullYear() === anioActual
@@ -116,7 +113,10 @@ export default function AdminAlumnosPage() {
 
         let estadoCalculado = 'deuda'
         
-        if (tienePagoEsteMes) {
+        // REGLA DE ORO: Si no tiene pagos es deudor, sino evalúa el mes y el día
+        if (pagosAlumno.length === 0) {
+          estadoCalculado = 'deuda'
+        } else if (tienePagoEsteMes) {
           estadoCalculado = 'al_dia'
         } else {
           if (diaActual <= diaVencimiento) {
@@ -192,7 +192,10 @@ export default function AdminAlumnosPage() {
     if (datos.alumnosAPagar.length === 0) return toast.error("Seleccioná al menos un alumno.")
     
     try {
-      const nombresBeneficiarios = alumnos.filter(a => datos.alumnosAPagar.includes(a.id)).map(a => a.nombre).join(" / ")
+      const { data: dataOficial, error: errorOficial } = await supabase.from('usuarios').select('*').eq('rol', 'alumno')
+      if (errorOficial) throw errorOficial
+
+      const nombresBeneficiarios = (dataOficial || []).filter(a => datos.alumnosAPagar.includes(a.id)).map(a => a.nombre).join(" / ")
       const nroRecibo = `0001-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`
 
       let fechaPago = new Date().toISOString()
@@ -257,43 +260,28 @@ export default function AdminAlumnosPage() {
   }) 
 
   return (
-    <div className="space-y-8 animate-in fade-in pb-12 max-w-6xl mx-auto">
-      
-      {vistaActiva === 'directorio' && (
+    <div className="space-y-8 animate-in fade-in pb-12 max-w-4xl mx-auto">
+      {vistaActiva === 'directorio' ? (
         <ListaDirectorio 
-          alumnos={alumnosFiltrados}
-          modeloNegocio={modeloNegocio}
-          textos={textos}
-          filtroTexto={filtroTexto}
-          onFiltroTextoChange={setFiltroTexto}
-          filtroEtiqueta={filtroEtiqueta}
-          onFiltroEtiquetaChange={setFiltroEtiqueta}
-          onAbrirDetalle={(alumno) => { setAlumnoSeleccionado(alumno); setVistaActiva('detalle'); }}
+          alumnos={alumnosFiltrados} modeloNegocio={modeloNegocio} textos={textos}
+          filtroTexto={filtroTexto} onFiltroTextoChange={setFiltroTexto}
+          filtroEtiqueta={filtroEtiqueta} onFiltroEtiquetaChange={setFiltroEtiqueta}
+          onAbrirDetalle={(al) => { setAlumnoSeleccionado(al); setVistaActiva('detalle'); }}
           onPreRegistro={() => setModalPreRegistro(true)}
         />
-      )}
-
-      {vistaActiva === 'detalle' && alumnoSeleccionado && (
-        <FichaAlumno 
-          alumno={alumnoSeleccionado}
-          modeloNegocio={modeloNegocio}
-          onVolver={() => setVistaActiva('directorio')}
-          onAbrirCobro={() => {
-            const familia = alumnos.filter(a => {
-              if (a.id === alumnoSeleccionado.id) return false;
-              if (!alumnoSeleccionado.titular_id) {
-                return a.titular_id === alumnoSeleccionado.id; 
-              }
-              return a.id === alumnoSeleccionado.titular_id || a.titular_id === alumnoSeleccionado.titular_id;
-            })
-            setModalCobro({ abierto: true, familia: [alumnoSeleccionado, ...familia] })
-          }}
-          onVerRecibo={setReciboVisualizado}
-          onSubirArchivo={simularSubidaArchivo}
-          onCambiarFoto={handleCambiarFotoAdmin}
-          onArchivar={() => handleArchivarAlumno(alumnoSeleccionado.id)}
-          onEliminarPre={() => handleEliminarPreInscripcion(alumnoSeleccionado.email)}
-        />
+      ) : (
+        alumnoSeleccionado && (
+          <FichaAlumno 
+            alumno={alumnoSeleccionado} modeloNegocio={modeloNegocio}
+            onVolver={() => setVistaActiva('directorio')}
+            onAbrirCobro={() => setModalCobro({abierto: true, familia: [alumnoSeleccionado]})}
+            onVerRecibo={(rec) => setReciboVisualizado(rec)}
+            onSubirArchivo={cargarAlumnos}
+            onCambiarFoto={cargarAlumnos}
+            onArchivar={() => handleArchivarAlumno(alumnoSeleccionado.id)}
+            onEliminarPre={() => handleEliminarPreInscripcion(alumnoSeleccionado.email)}
+          />
+        )
       )}
 
       <NuevoAlumnoModal 
@@ -313,7 +301,13 @@ export default function AdminAlumnosPage() {
         />
       )}
 
-      {reciboVisualizado && <VisorReciboPDF recibo={reciboVisualizado} academia={academiaOficial} onClose={() => setReciboVisualizado(null)} />}
+      {reciboVisualizado && (
+        <VisorReciboPDF 
+          recibo={reciboVisualizado} 
+          academia={academiaOficial} 
+          onClose={() => setReciboVisualizado(null)} 
+        />
+      )}
     </div>
   )
 }

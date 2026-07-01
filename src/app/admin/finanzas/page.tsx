@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase"
-import { BarChart3, Plus, Minus, Loader2 } from "lucide-react"
+import { Wallet, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
@@ -147,7 +147,7 @@ export default function FinanzasDashboard() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print:hidden bg-card p-6 rounded-2xl border border-border shadow-sm">
         <div>
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight flex items-center gap-3">
-            <BarChart3 className="h-8 w-8 text-primary" /> Tesorería
+            <Wallet className="h-8 w-8 text-primary" /> Finanzas
           </h1>
           <p className="text-muted-foreground mt-1 font-medium">Control de caja, proyecciones y egresos.</p>
         </div>
