@@ -94,22 +94,29 @@ export default function FichaAlumno({
     }
   }
 
-  const handleBorrarLegajo = async (docId: string, docUrl: string) => {
-    try {
-      if (!confirm("¿Eliminar este documento del legajo?")) return
-      setBorrandoDoc(docId)
-      const filePath = docUrl.split('/documentos/')[1]
-      if (filePath) await supabase.storage.from('documentos').remove([filePath])
-      const nuevosDocs = (flex.documentos || []).filter((doc: any) => doc.id !== docId)
-      const nuevosFlex = { ...flex, documentos: nuevosDocs }
-      await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
-      toast.success("Documento eliminado.")
-      onSubirArchivo()
-    } catch (error: any) {
-      toast.error("Error al eliminar el documento.")
-    } finally {
-      setBorrandoDoc(null)
-    }
+  const handleBorrarLegajo = (docId: string, docUrl: string) => {
+    toast("¿Eliminar este documento del legajo?", {
+      action: {
+        label: "Eliminar",
+        onClick: async () => {
+          try {
+            setBorrandoDoc(docId)
+            const filePath = docUrl.split('/documentos/')[1]
+            if (filePath) await supabase.storage.from('documentos').remove([filePath])
+            const nuevosDocs = (flex.documentos || []).filter((doc: any) => doc.id !== docId)
+            const nuevosFlex = { ...flex, documentos: nuevosDocs }
+            await supabase.from('usuarios').update({ datos_flexibles: nuevosFlex }).eq('id', alumno.id)
+            toast.success("Documento eliminado.")
+            onSubirArchivo()
+          } catch (error: any) {
+            toast.error("Error al eliminar el documento.")
+          } finally {
+            setBorrandoDoc(null)
+          }
+        }
+      },
+      cancel: { label: "Cancelar", onClick: () => {} }
+    })
   }
 
   const handleGuardarVencimiento = async () => {

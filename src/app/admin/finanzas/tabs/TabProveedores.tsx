@@ -40,11 +40,18 @@ export default function TabProveedores({ movimientosMes, onAgregarEgreso, mesSel
     setNuevoGasto({ nombre: '', montoAprox: '', diaVencimiento: '10' })
   }
 
-  const handleEliminar = async (id: string) => {
-    if(confirm("¿Eliminar este gasto de la base de datos?")) {
-      await supabase.from('gastos_fijos').delete().eq('id', id)
-      setProveedores(proveedores.filter(p => p.id !== id))
-    }
+  const handleEliminar = (id: string) => {
+    toast("¿Eliminar este gasto de la base de datos?", {
+      action: {
+        label: "Sí, Eliminar",
+        onClick: async () => {
+          await supabase.from('gastos_fijos').delete().eq('id', id)
+          setProveedores(proveedores.filter(p => p.id !== id))
+          toast.success("Gasto eliminado.")
+        }
+      },
+      cancel: { label: "Cancelar", onClick: () => {} }
+    })
   }
 
   const handleConfirmarPagoFinal = async () => {

@@ -186,11 +186,27 @@ export default function TabPerfil({
         <div className="mt-12 pt-8 border-t border-border flex flex-col gap-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acciones de Cuenta</p>
           {alumno.es_preinscripcion ? (
-            <Button variant="ghost" onClick={() => { if(confirm("¿Eliminar?")) onEliminarPre() }} className="w-full text-destructive hover:bg-destructive/10 font-bold uppercase text-[10px] tracking-widest h-11 rounded-xl">
+            <Button 
+              variant="ghost" 
+              onClick={() => toast("¿Eliminar definitivamente?", {
+                description: "Esta pre-inscripción será borrada de la sala de espera.",
+                action: { label: "Eliminar", onClick: () => onEliminarPre() },
+                cancel: { label: "Cancelar", onClick: () => {} }
+              })} 
+              className="w-full text-destructive hover:bg-destructive/10 font-bold uppercase text-[10px] tracking-widest h-11 rounded-xl"
+            >
               <Trash2 className="h-4 w-4 mr-2" /> Eliminar de Sala de Espera
             </Button>
           ) : (
-            <Button variant="ghost" onClick={() => { if(confirm("¿Archivar alumna?")) onArchivar() }} className="w-full text-destructive hover:bg-destructive/10 font-bold uppercase text-[10px] tracking-widest h-11 rounded-xl">
+            <Button 
+              variant="ghost" 
+              onClick={() => toast("¿Archivar alumna?", {
+                description: "Dejará de aparecer en la lista activa del directorio.",
+                action: { label: "Archivar", onClick: () => onArchivar() },
+                cancel: { label: "Cancelar", onClick: () => {} }
+              })} 
+              className="w-full text-destructive hover:bg-destructive/10 font-bold uppercase text-[10px] tracking-widest h-11 rounded-xl"
+            >
               <UserX className="h-4 w-4 mr-2" /> Archivar / Dar de Baja
             </Button>
           )}

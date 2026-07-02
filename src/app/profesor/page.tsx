@@ -98,10 +98,17 @@ export default function MiGrillaProfe() {
   }
 
   const handleAvisarAusencia = (claseId: string) => {
-    if (confirm("¿Estás seguro de reportar tu ausencia para esta clase? Se liberará el cupo para suplencias.")) {
-      setClases(prev => prev.map(c => c.id === claseId ? { ...c, estado_profe: 'ausente' } : c))
-      toast.error("Ausencia informada a la administración.")
-    }
+    toast("¿Reportar ausencia para esta clase?", {
+      description: "Se liberará el cupo para suplencias.",
+      action: {
+        label: "Sí, Reportar",
+        onClick: async () => {
+          setClases(prev => prev.map(c => c.id === claseId ? { ...c, estado_profe: 'ausente' } : c))
+          toast.error("Ausencia informada a la administración.")
+        }
+      },
+      cancel: { label: "Cancelar", onClick: () => {} }
+    })
   }
 
   const toggleAsistencia = (claseId: string, reservaId: string, estadoActual: boolean) => {

@@ -146,25 +146,32 @@ export default function ConfiguracionAdminPage() {
     }
   }
 
-  const handleBorrarEvento = async (idAviso: string, urlImagen: string) => {
+  const handleBorrarEvento = (idAviso: string, urlImagen: string) => {
     if (!academiaId) return
-    if (!confirm("¿Eliminar este aviso de la cartelera?")) return
-    setBorrandoEventoId(idAviso)
-    try {
-      if (urlImagen) {
-        const filePath = urlImagen.split('/avatars/')[1]
-        if (filePath) await supabase.storage.from('avatars').remove([filePath])
-      }
-      const nuevaLista = (infoAcademia.eventos_cartelera || []).filter((ev: any) => ev.id !== idAviso)
-      const { error } = await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
-      if (error) throw error
-      setInfoAcademia(prev => ({ ...prev, eventos_cartelera: nuevaLista }))
-      toast.success("Aviso eliminado.")
-    } catch (error: any) {
-      toast.error("Error al borrar aviso.")
-    } finally {
-      setBorrandoEventoId(null)
-    }
+    toast("¿Eliminar este aviso de la cartelera?", {
+      action: {
+        label: "Sí, Eliminar",
+        onClick: async () => {
+          setBorrandoEventoId(idAviso)
+          try {
+            if (urlImagen) {
+              const filePath = urlImagen.split('/avatars/')[1]
+              if (filePath) await supabase.storage.from('avatars').remove([filePath])
+            }
+            const nuevaLista = (infoAcademia.eventos_cartelera || []).filter((ev: any) => ev.id !== idAviso)
+            const { error } = await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
+            if (error) throw error
+            setInfoAcademia(prev => ({ ...prev, eventos_cartelera: nuevaLista }))
+            toast.success("Aviso eliminado.")
+          } catch (error: any) {
+            toast.error("Error al borrar aviso.")
+          } finally {
+            setBorrandoEventoId(null)
+          }
+        }
+      },
+      cancel: { label: "Cancelar", onClick: () => {} }
+    })
   }
 
   const abrirModalNueva = () => { setTarifaEditando({ id: null, nombre: "", precio: "", tipo: esMensual ? "mensual" : "creditos", creditos: "" }); setModalTarifa(true) }
@@ -193,21 +200,28 @@ export default function ConfiguracionAdminPage() {
     }
   }
   
-  const borrarTarifa = async () => {
+  const borrarTarifa = () => {
     if (!tarifaEditando?.id) return
-    if (!confirm("¿Eliminar definitivamente esta tarifa?")) return
-    setGuardandoTarifa(true)
-    try {
-      const { error } = await supabase.from('tarifas').delete().eq('id', tarifaEditando.id)
-      if (error) throw error
-      setTarifas(tarifas.filter(t => t.id !== tarifaEditando.id))
-      toast.success("Tarifa eliminada.")
-      setModalTarifa(false)
-    } catch (error: any) {
-      toast.error("Error al eliminar tarifa.")
-    } finally {
-      setGuardandoTarifa(false)
-    }
+    toast("¿Eliminar definitivamente esta tarifa?", {
+      action: {
+        label: "Sí, Eliminar",
+        onClick: async () => {
+          setGuardandoTarifa(true)
+          try {
+            const { error } = await supabase.from('tarifas').delete().eq('id', tarifaEditando.id)
+            if (error) throw error
+            setTarifas(tarifas.filter(t => t.id !== tarifaEditando.id))
+            toast.success("Tarifa eliminada.")
+            setModalTarifa(false)
+          } catch (error: any) {
+            toast.error("Error al eliminar tarifa.")
+          } finally {
+            setGuardandoTarifa(false)
+          }
+        }
+      },
+      cancel: { label: "Cancelar", onClick: () => {} }
+    })
   }
 
   // === RENDERIZADO VISUAL ===
