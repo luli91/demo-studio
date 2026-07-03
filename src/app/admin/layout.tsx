@@ -20,7 +20,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const menuItems = [
     { label: "Dashboard", path: "/admin", icon: <LayoutDashboard className="h-5 w-5" /> },
     { label: "Directorio", path: "/admin/alumnos", icon: <Users className="h-5 w-5" /> },
-    //{ label: "Staff", path: "/admin/staff", icon: <GraduationCap className="h-5 w-5" /> },
+    { label: "Staff", path: "/admin/staff", icon: <GraduationCap className="h-5 w-5" /> },
     //{ label: "Grilla", path: "/admin/clases", icon: <CalendarDays className="h-5 w-5" /> },
     //{ label: "Multimedia", path: "/admin/multimedia", icon: <ImageIcon className="h-5 w-5" /> },
     { label: "Finanzas", path: "/admin/finanzas", icon: <Wallet className="h-5 w-5" /> },

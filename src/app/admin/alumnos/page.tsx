@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase"
+import { Search } from "lucide-react"
 
-// Componentes modulares
 import VisorReciboPDF from "@/components/admin/VisorReciboPDF"
 import CobroModal from "@/components/admin/CobroModal"
 import FichaAlumno from "@/components/admin/FichaAlumno"
@@ -94,8 +94,10 @@ export default function AdminAlumnosPage() {
       const mesActual = hoy.getMonth()
       const anioActual = hoy.getFullYear()
 
+      const mesPasado = mesActual === 0 ? 11 : mesActual - 1
+      const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
+
       const alumnasOficiales = (dataOficial || []).map((u: any) => {
-        const pagosAlumno = (dataPagos || []).filter(p => p.alumno_id === u.id || (u.titular_id && p.alumno_id === u.titular_id))
         const flex = u.datos_flexibles || {}
         
         let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
@@ -106,24 +108,32 @@ export default function AdminAlumnosPage() {
           }
         }
         
-        const tienePagoEsteMes = pagosAlumno.some((p: any) => {
-          const fechaPago = new Date(p.fecha)
-          return p.concepto_categoria === 'CUOTA' && fechaPago.getMonth() === mesActual && fechaPago.getFullYear() === anioActual
+        // REGLA HÍBRIDA (Nuevos pagos individuales + Viejos pagos grupales)
+        const pagosPropios = (dataPagos || []).filter((p: any) => {
+          if (p.alumno_id === u.id) return true // Nueva lógica: su propio ID
+          return p.beneficiario && p.beneficiario.includes(u.nombre) // Lógica vieja (para no perder su historial)
+        })
+        
+        const tienePagoEsteMes = pagosPropios.some((p: any) => {
+          const f = new Date(p.fecha)
+          return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
+        })
+
+        const tienePagoMesAnterior = pagosPropios.some((p: any) => {
+          const f = new Date(p.fecha)
+          return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
         })
 
         let estadoCalculado = 'deuda'
         
-        // REGLA DE ORO: Si no tiene pagos es deudor, sino evalúa el mes y el día
-        if (pagosAlumno.length === 0) {
+        if (pagosPropios.length === 0) {
           estadoCalculado = 'deuda'
         } else if (tienePagoEsteMes) {
           estadoCalculado = 'al_dia'
+        } else if (!tienePagoMesAnterior) {
+          estadoCalculado = 'deuda' // Debe el mes pasado, el periodo de gracia no lo salva
         } else {
-          if (diaActual <= diaVencimiento) {
-            estadoCalculado = 'al_dia'
-          } else {
-            estadoCalculado = 'deuda'
-          }
+          estadoCalculado = diaActual <= diaVencimiento ? 'al_dia' : 'deuda'
         }
 
         return {
@@ -138,7 +148,7 @@ export default function AdminAlumnosPage() {
           creditos: flex.creditos_clases || 0,
           contacto_urgencia: flex.contacto_urgencia || "",
           documentos: flex.documentos || [],
-          pagos: pagosAlumno, 
+          pagos: pagosPropios, // Ahora la ficha solo muestra SUS pagos
           asistencias: flex.asistencias || [],
           entrena: u.activa !== false,
           datos_flexibles: flex,
@@ -148,20 +158,9 @@ export default function AdminAlumnosPage() {
 
       const alumnasPre = (dataPre || []).map((p: any) => ({
         id: `pre-${p.email}`, 
-        nombre: p.nombre,
-        apellido: "",
-        email: p.email,
-        telefono: p.telefono,
-        avatar_url: null,
-        estado_cuota: 'vencida',
-        creditos: 0,
-        contacto_urgencia: "",
-        documentos: [],
-        pagos: [], 
-        asistencias: [],
-        entrena: true,
-        datos_flexibles: {},
-        es_preinscripcion: true 
+        nombre: p.nombre, apellido: "", email: p.email, telefono: p.telefono,
+        avatar_url: null, estado_cuota: 'vencida', creditos: 0, contacto_urgencia: "",
+        documentos: [], pagos: [], asistencias: [], entrena: true, datos_flexibles: {}, es_preinscripcion: true 
       }))
       
       const todasJuntas = [...alumnasOficiales, ...alumnasPre].sort((a, b) => a.nombre.localeCompare(b.nombre))
@@ -178,8 +177,8 @@ export default function AdminAlumnosPage() {
   }, [])
 
   useEffect(() => {
-    if (isMounted && alumnos.length > 0) {
-      if (alumnoSeleccionado) setAlumnoSeleccionado(alumnos.find(a => a.id === alumnoSeleccionado.id))
+    if (isMounted && alumnos.length > 0 && alumnoSeleccionado) {
+      setAlumnoSeleccionado(alumnos.find(a => a.id === alumnoSeleccionado.id))
     }
   }, [alumnos, isMounted])
 
@@ -188,39 +187,39 @@ export default function AdminAlumnosPage() {
   const simularSubidaArchivo = () => { cargarAlumnos() }
   const handleCambiarFotoAdmin = () => { cargarAlumnos() }
 
+  // NUEVO SISTEMA DE COBROS: 1 PAGO POR CADA ALUMNO SELECCIONADO
   const handleCobrar = async (datos: any) => {
     if (datos.alumnosAPagar.length === 0) return toast.error("Seleccioná al menos un alumno.")
     
     try {
-      const { data: dataOficial, error: errorOficial } = await supabase.from('usuarios').select('*').eq('rol', 'alumno')
-      if (errorOficial) throw errorOficial
-
-      const nombresBeneficiarios = (dataOficial || []).filter(a => datos.alumnosAPagar.includes(a.id)).map(a => a.nombre).join(" / ")
       const nroRecibo = `0001-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`
-
       let fechaPago = new Date().toISOString()
+      
       if (datos.concepto === "CUOTA" && datos.mesImputado) {
         const hoy = new Date()
         fechaPago = new Date(hoy.getFullYear(), Number(datos.mesImputado) - 1, 15).toISOString()
       }
 
-      const { error: errorPago } = await supabase.from('pagos').insert({
-        alumno_id: alumnoSeleccionado.id, 
-        nro_recibo: nroRecibo,
-        concepto_categoria: datos.concepto,
-        concepto_detalle: datos.observaciones,
-        monto: datos.monto,
-        beneficiario: nombresBeneficiarios,
-        estado: 'aprobado',
-        fecha: fechaPago 
-      })
-
-      if (errorPago) throw errorPago
+      const montoPorAlumno = datos.monto / datos.alumnosAPagar.length
 
       for (const idAlumno of datos.alumnosAPagar) {
+        const alumnoTarget = alumnos.find(a => a.id === idAlumno)
+        const nombreBeneficiario = alumnoTarget ? alumnoTarget.nombre : "Alumno"
+
+        const { error: errorPago } = await supabase.from('pagos').insert({
+          alumno_id: idAlumno, 
+          nro_recibo: nroRecibo,
+          concepto_categoria: datos.concepto,
+          concepto_detalle: datos.observaciones,
+          monto: montoPorAlumno,
+          beneficiario: nombreBeneficiario,
+          estado: 'aprobado',
+          fecha: fechaPago 
+        })
+        if (errorPago) throw errorPago
+
         const { data: usr } = await supabase.from('usuarios').select('datos_flexibles').eq('id', idAlumno).single()
         const flexActual = usr?.datos_flexibles || {}
-
         const mesActual = new Date().getMonth() + 1
         const esPagoDelMesCorriente = datos.mesImputado ? Number(datos.mesImputado) === mesActual : true
 
@@ -237,7 +236,7 @@ export default function AdminAlumnosPage() {
       }
 
       setModalCobro({abierto: false, familia: []})
-      toast.success("¡Cobro guardado en la BD y recibo emitido!")
+      toast.success("¡Cobro guardado! Pago imputado individualmente a cada alumno.")
       cargarAlumnos() 
     } catch (error: any) {
       toast.error("Error al procesar el cobro: " + error.message)
@@ -255,7 +254,6 @@ export default function AdminAlumnosPage() {
       const tieneEtiqueta = a.datos_flexibles?.etiquetas?.includes(filtroEtiqueta)
       if (!tieneEtiqueta) return false
     }
-
     return true 
   }) 
 
@@ -274,7 +272,14 @@ export default function AdminAlumnosPage() {
           <FichaAlumno 
             alumno={alumnoSeleccionado} modeloNegocio={modeloNegocio}
             onVolver={() => setVistaActiva('directorio')}
-            onAbrirCobro={() => setModalCobro({abierto: true, familia: [alumnoSeleccionado]})}
+            onAbrirCobro={() => {
+              const familia = alumnos.filter(a => {
+                if (a.id === alumnoSeleccionado.id) return false;
+                if (!alumnoSeleccionado.titular_id) return a.titular_id === alumnoSeleccionado.id; 
+                return a.id === alumnoSeleccionado.titular_id || a.titular_id === alumnoSeleccionado.titular_id;
+              })
+              setModalCobro({ abierto: true, familia: [alumnoSeleccionado, ...familia] })
+            }}
             onVerRecibo={(rec) => setReciboVisualizado(rec)}
             onSubirArchivo={cargarAlumnos}
             onCambiarFoto={cargarAlumnos}
@@ -285,28 +290,19 @@ export default function AdminAlumnosPage() {
       )}
 
       <NuevoAlumnoModal 
-        abierto={modalPreRegistro}
-        modeloNegocio={modeloNegocio}
-        onClose={() => setModalPreRegistro(false)}
-        onGuardado={cargarAlumnos} 
+        abierto={modalPreRegistro} modeloNegocio={modeloNegocio}
+        onClose={() => setModalPreRegistro(false)} onGuardado={cargarAlumnos} 
       />
 
       {modalCobro.abierto && (
         <CobroModal 
-          abierto={modalCobro.abierto} 
-          familia={modalCobro.familia} 
-          modeloNegocio={modeloNegocio}
-          onClose={() => setModalCobro({abierto: false, familia: []})}
-          onCobrar={handleCobrar}
+          abierto={modalCobro.abierto} familia={modalCobro.familia} modeloNegocio={modeloNegocio}
+          onClose={() => setModalCobro({abierto: false, familia: []})} onCobrar={handleCobrar}
         />
       )}
 
       {reciboVisualizado && (
-        <VisorReciboPDF 
-          recibo={reciboVisualizado} 
-          academia={academiaOficial} 
-          onClose={() => setReciboVisualizado(null)} 
-        />
+        <VisorReciboPDF recibo={reciboVisualizado} academia={academiaOficial} onClose={() => setReciboVisualizado(null)} />
       )}
     </div>
   )

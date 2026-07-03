@@ -59,7 +59,7 @@ export default function TarjetasMetricas({ metricas }: { metricas: any }) {
             </div>
           </div>
           <div className="mt-4 text-[11px] font-black uppercase tracking-widest text-red-600/70 border-t border-red-200/50 pt-2">
-            Dinero en la calle: <span className="text-red-700 font-black">${metricas.dineroEnCalle.toLocaleString('es-AR')}</span>
+            Dinero sin cobrar: <span className="text-red-700 font-black">${metricas.dineroEnCalle.toLocaleString('es-AR')}</span>
           </div>
         </CardContent>
       </Card>

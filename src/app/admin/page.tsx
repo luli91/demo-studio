@@ -6,7 +6,6 @@ import { Loader2, PlusCircle, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
-// Importamos los componentes visuales modulares
 import TarjetasMetricas from "./secciones/TarjetasMetricas"
 import GraficoEvolucion from "./secciones/GraficoEvolucion"
 import AgendaDiaria from "./secciones/AgendaDiaria"
@@ -16,17 +15,10 @@ export default function AdminDashboardMainPage() {
   const supabase = createClient()
   
   const [metricas, setMetricas] = useState({
-    recaudacionMes: 0,
-    recaudacionAnterior: 0,
-    crecimientoPorcentaje: 0,
-    dineroEnCalle: 0,
-    totalAlumnasActivas: 0,
-    alumnasAlDia: 0,
-    alumnasEnMora: 0,
-    alumnasPausadas: 0,
-    listaDeudores: [] as any[],
-    ultimosPagos: [] as any[],
-    graficoEvolucion: [] as any[]
+    recaudacionMes: 0, recaudacionAnterior: 0, crecimientoPorcentaje: 0,
+    dineroEnCalle: 0, totalAlumnasActivas: 0, alumnasAlDia: 0,
+    alumnasEnMora: 0, alumnasPausadas: 0, listaDeudores: [] as any[],
+    ultimosPagos: [] as any[], graficoEvolucion: [] as any[]
   })
   
   const [cargando, setCargando] = useState(true)
@@ -59,14 +51,13 @@ export default function AdminDashboardMainPage() {
         let alDiaCount = 0; let enMoraCount = 0; let pausadasCount = 0;
         const morososList: any[] = []
         const diaActual = hoy.getDate(); const mesActual = hoy.getMonth(); const anioActual = hoy.getFullYear()
+        const mesPasado = mesActual === 0 ? 11 : mesActual - 1
+        const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
 
         const pagosMesActual = todosLosPagos.filter((p: any) => {
           const f = new Date(p.fecha)
           return f.getMonth() === mesActual && f.getFullYear() === anioActual
         })
-
-        const mesPasado = mesActual === 0 ? 11 : mesActual - 1
-        const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
         const pagosMesAnterior = todosLosPagos.filter((p: any) => {
           const f = new Date(p.fecha)
           return f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
@@ -102,25 +93,31 @@ export default function AdminDashboardMainPage() {
             return 
           }
 
-          const pagosHistorialTotal = todosLosPagos.filter(p => p.alumno_id === u.id || (u.titular_id && p.alumno_id === u.titular_id))
-          
           let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
           if (u.titular_id) {
             const tutor = usuarios.find((t: any) => t.id === u.titular_id)
-            if (tutor?.datos_flexibles) {
-              const tutorFlex = typeof tutor.datos_flexibles === 'string' ? JSON.parse(tutor.datos_flexibles) : tutor.datos_flexibles
-              if (tutorFlex?.dia_vencimiento) diaVencimiento = parseInt(tutorFlex.dia_vencimiento)
-            }
+            if (tutor?.datos_flexibles?.dia_vencimiento) diaVencimiento = parseInt(tutor.datos_flexibles.dia_vencimiento)
           }
 
-          const tienePagoEsteMes = pagosHistorialTotal.some((p: any) => {
+          const pagosPropios = todosLosPagos.filter((p: any) => {
+            if (p.alumno_id === u.id) return true
+            return p.beneficiario && p.beneficiario.includes(u.nombre)
+          })
+
+          const tienePagoEsteMes = pagosPropios.some((p: any) => {
             const f = new Date(p.fecha)
             return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
           })
 
+          const tienePagoMesAnterior = pagosPropios.some((p: any) => {
+            const f = new Date(p.fecha)
+            return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
+          })
+
           let estaAlDia = false
-          if (pagosHistorialTotal.length === 0) estaAlDia = false
+          if (pagosPropios.length === 0) estaAlDia = false
           else if (tienePagoEsteMes) estaAlDia = true
+          else if (!tienePagoMesAnterior) estaAlDia = false
           else estaAlDia = diaActual <= diaVencimiento
 
           if (estaAlDia) {
@@ -129,7 +126,7 @@ export default function AdminDashboardMainPage() {
             enMoraCount++
             morososList.push({
               id: u.id, nombre: u.nombre, telefono: u.telefono, 
-              detalle: pagosHistorialTotal.length === 0 ? "Ingreso Nuevo • Pendiente" : `Vencido el ${diaVencimiento}`
+              detalle: pagosPropios.length === 0 ? "Ingreso Nuevo • Pendiente" : `Vencido el ${diaVencimiento}`
             })
           }
         })
@@ -154,8 +151,6 @@ export default function AdminDashboardMainPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in pb-12 max-w-[1600px] mx-auto relative">
-      
-      {/* HEADER VISUAL */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Panel de Control</h1>
@@ -166,20 +161,14 @@ export default function AdminDashboardMainPage() {
           <Link href="/admin/alumnos"><Button className="h-11 bg-slate-900 hover:bg-slate-800 text-white font-bold px-6 shadow-md"><PlusCircle className="h-4 w-4 mr-2" /> Registrar Cobro</Button></Link>
         </div>
       </div>
-
-      {/* COMPONENTES MODULARES */}
       <TarjetasMetricas metricas={metricas} />
-
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-6">
           <GraficoEvolucion datosGrafico={metricas.graficoEvolucion} />
-          
           <AgendaDiaria tareas={tareas} setTareas={setTareas} hoyStr={hoyStr} />
         </div>
-
         <AlertasYPagos deudores={metricas.listaDeudores} ultimosPagos={metricas.ultimosPagos} />
       </div>
-
     </div>
   )
 }

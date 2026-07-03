@@ -64,7 +64,6 @@ export default function PanelAlumnoPage() {
       const hoy = new Date()
       const mesActual = hoy.getMonth()
       const anioActual = hoy.getFullYear()
-      const inicioMesStr = `${anioActual}-${String(mesActual + 1).padStart(2, '0')}-01`
 
       // Traemos TODOS los pagos de la familia de cualquier fecha (para ver si son alumnos nuevos)
       const { data: historialPagos } = await supabase
@@ -88,17 +87,29 @@ export default function PanelAlumnoPage() {
           if (tutorFlex.dia_vencimiento) diaVencimiento = parseInt(tutorFlex.dia_vencimiento)
         }
 
+        // 1. Calculamos cuál fue el mes anterior para la validación
+        const mesPasado = mesActual === 0 ? 11 : mesActual - 1
+        const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
+
+        // 2. Buscamos si pagó este mes o el anterior
         const tienePagoEsteMes = pagosDelUsuario.some((p: any) => {
           const f = new Date(p.fecha)
           return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
         })
 
-        if (pagosDelUsuario.length === 0) return "vencida" // Alumno nuevo siempre debe
-        if (tienePagoEsteMes) return "al_dia" // Pagó este mes
-        if (hoy.getDate() <= diaVencimiento) return "al_dia" // Aún no vence
+        const tienePagoMesAnterior = pagosDelUsuario.some((p: any) => {
+          const f = new Date(p.fecha)
+          return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
+        })
+
+        // 3. La Regla de Oro Definitiva (con returns directos)
+        if (pagosDelUsuario.length === 0) return "vencida" // Alumno nuevo siempre arranca debiendo
+        if (tienePagoEsteMes) return "al_dia" // Ya pagó la cuota de este mes
+        if (!tienePagoMesAnterior) return "vencida" // Debe el mes pasado, no tiene derecho a período de gracia
+        if (hoy.getDate() <= diaVencimiento) return "al_dia" // Tiene el mes pasado al día y estamos en período de gracia (ej: del 1 al 10)
         
-        return "vencida" // Se pasó el vencimiento y no pagó
-      }
+        return "vencida" // Se le pasó el día de vencimiento y no pagó el mes actual
+      } // <--- ¡ESTA ERA LA LLAVE QUE FALTABA!
 
       // 5. Armamos la lista mapeada ya con el estado calculado en vivo
       const datosPadre = {
