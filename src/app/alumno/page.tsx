@@ -68,7 +68,7 @@ export default function PanelAlumnoPage() {
       // Traemos TODOS los pagos de la familia de cualquier fecha (para ver si son alumnos nuevos)
       const { data: historialPagos } = await supabase
         .from('pagos')
-        .select('alumno_id, concepto_categoria, fecha')
+        .select('alumno_id, concepto_categoria, fecha, beneficiario')
         .in('alumno_id', idsFamiliares)
       
       const pagos = historialPagos || []
@@ -78,7 +78,15 @@ export default function PanelAlumnoPage() {
         let flex: any = {}
         try { flex = typeof usuario.datos_flexibles === 'string' ? JSON.parse(usuario.datos_flexibles) : (usuario.datos_flexibles || {}) } catch (e) {}
 
-        const pagosDelUsuario = pagos.filter(p => p.alumno_id === usuario.id || (usuario.titular_id && p.alumno_id === usuario.titular_id))
+        // REGLA DE ORO FAMILIAR APLICADA AL PANEL DEL ALUMNO
+        const pagosDelUsuario = pagos.filter((p: any) => {
+          if (p.alumno_id === usuario.id) return true; 
+          
+          if (usuario.titular_id && p.alumno_id === usuario.titular_id) {
+            return p.beneficiario && p.beneficiario.includes(usuario.nombre);
+          }
+          return false;
+        })
         
         let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
         // Si es menor hereda vencimiento del tutor
@@ -109,7 +117,7 @@ export default function PanelAlumnoPage() {
         if (hoy.getDate() <= diaVencimiento) return "al_dia" // Tiene el mes pasado al día y estamos en período de gracia (ej: del 1 al 10)
         
         return "vencida" // Se le pasó el día de vencimiento y no pagó el mes actual
-      } // <--- ¡ESTA ERA LA LLAVE QUE FALTABA!
+      } // <--- LLAVE CERRADA
 
       // 5. Armamos la lista mapeada ya con el estado calculado en vivo
       const datosPadre = {
@@ -214,16 +222,20 @@ export default function PanelAlumnoPage() {
           <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
             <Users className="h-4 w-4 text-primary" /> Seleccionar Alumno
           </h3>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="flex flex-wrap gap-2">
             {familiaresQueEntrenan.map(fliar => (
               <Button 
                 key={fliar.id} 
                 variant={perfilActivo.id === fliar.id ? "default" : "outline"} 
                 onClick={() => {setPerfilActivo(fliar); cargarProximasClases(fliar.id)}} 
-                className="h-12 rounded-xl px-5 gap-2 font-bold uppercase text-xs tracking-wider"
+                className="flex-1 min-w-[130px] sm:flex-none h-12 rounded-xl px-4 gap-2 font-bold uppercase text-[11px] tracking-wider"
               >
-                <div className="w-5 h-5 rounded-full bg-foreground/10 flex items-center justify-center text-[10px] font-black">{fliar.nombre.charAt(0)}</div>
-                {fliar.id === usuarioPrincipal.id ? 'Titular' : fliar.nombre.split(" ")[0]}
+                <div className="w-5 h-5 rounded-full bg-foreground/10 flex items-center justify-center text-[10px] font-black shrink-0">
+                  {fliar.nombre.charAt(0)}
+                </div>
+                <span className="truncate">
+                  {fliar.id === usuarioPrincipal.id ? 'Titular' : fliar.nombre.split(" ")[0]}
+                </span>
               </Button>
             ))}
           </div>
