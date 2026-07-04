@@ -57,9 +57,18 @@ export default function FinanzasDashboard() {
       }
       setValorCuotaPromedio(promedio)
 
-      const ingresosMapeados = (resPagos.data || []).map(p => ({
-        id: p.id, tipo: "ingreso", fecha: p.fecha, descripcion: `${p.concepto_categoria} - Recibo para: ${p.beneficiario}`, monto: p.monto, metodo: "Sistema Central", comprobante_url: null
-      }))
+      const ingresosMapeados = (resPagos.data || []).map(p => {
+        const esEgreso = ['HONORARIOS', 'ADELANTO_SUELDO', 'GASTO'].includes(p.concepto_categoria)
+        return {
+          id: p.id, 
+          tipo: esEgreso ? "egreso" : "ingreso", 
+          fecha: p.fecha, 
+          descripcion: `${p.concepto_categoria} - Para: ${p.beneficiario || 'Sistema'}`, 
+          monto: p.monto, 
+          metodo: p.concepto_detalle || "Sistema Central", 
+          comprobante_url: null
+        }
+      })
 
       const combinados = [...ingresosMapeados, ...(resMovCaja.data || [])].sort(
         (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -73,7 +82,7 @@ export default function FinanzasDashboard() {
       const [anioSel, mesSel] = mesSeleccionado.split('-')
       
       usu.forEach((u: any) => {
-        if (u.rol === "admin") return 
+        if (u.rol === "admin" || u.rol === "profesor") return 
         let flex: any = {}
         try { flex = typeof u.datos_flexibles === 'string' ? JSON.parse(u.datos_flexibles) : (u.datos_flexibles || {}) } catch (e) {}
         if (flex.pausado === true) return
@@ -124,6 +133,7 @@ export default function FinanzasDashboard() {
     return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}` === mesSeleccionado
   })
 
+  // Los totales ahora dan exactos porque el mapeo ya le puso "egreso" a los sueldos
   const totalIngresos = movimientosFiltrados.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + Number(curr.monto), 0)
   const totalEgresos = movimientosFiltrados.filter(m => m.tipo === 'egreso').reduce((acc, curr) => acc + Number(curr.monto), 0)
   const resultadoNeto = totalIngresos - totalEgresos
@@ -191,7 +201,7 @@ export default function FinanzasDashboard() {
           tipo={tipoMovimiento} 
           mesSeleccionado={mesSeleccionado}
           alCerrar={() => setModalNuevoMovimiento(false)} 
-          alGuardar={(mov) => { agregarMovimiento(mov); setModalNuevoMovimiento(false) }} 
+          alGuardar={(mov: any) => { agregarMovimiento(mov); setModalNuevoMovimiento(false) }} 
         />
       )}
     </div>

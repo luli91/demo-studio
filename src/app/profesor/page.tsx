@@ -2,315 +2,238 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase"
-import { format, parseISO, isSameDay } from "date-fns"
+import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { 
-  Loader2, Clock, Users, ShieldAlert, ChevronDown, 
-  ChevronUp, UserMinus, Phone, MapPin, AlertCircle, 
-  CalendarCheck, CheckCircle2, CalendarX2, Hand
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Loader2, Users, Phone, AlertCircle, CheckCircle2, ShieldAlert, Megaphone } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { toast } from "sonner"
 
-// ========================================================
-// 🎭 DICCIONARIO SAAS UNIVERSAL
-// ========================================================
-const DICCIONARIO = {
-  mensual: {
-    pluralSujeros: "Jugadoras",
-    singularSujero: "Jugadora",
-    badgePresente: "Presente"
-  },
-  reservas: {
-    pluralSujeros: "Alumnas",
-    singularSujero: "Alumna",
-    badgePresente: "Anotada"
-  }
-}
-
-export default function MiGrillaProfe() {
+export default function ProfesorDashboardPage() {
   const supabase = createClient()
   
-  // 1. Estados
   const [isMounted, setIsMounted] = useState(false)
   const [perfil, setPerfil] = useState<any>(null)
-  const [clases, setClases] = useState<any[]>([])
+  const [misAlumnos, setMisAlumnos] = useState<any[]>([])
+  const [eventos, setEventos] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
-  const [claseExpandida, setClaseExpandida] = useState<string | null>(null)
   const [alumnaExpandida, setAlumnaExpandida] = useState<string | null>(null)
 
-  const modeloNegocio: string = "reservas"
-  const textos = DICCIONARIO[modeloNegocio as keyof typeof DICCIONARIO]
   const hoy = new Date()
 
-  // 2. Control y Persistencia Simulada (Bypass Modo Diseño)
   useEffect(() => {
     setIsMounted(true)
-    
-    // Perfil Simulado
-    setPerfil({ id: "profe-123", nombre: "Cynthia", apellido: "Luján", rol: "profesor" })
-    
-    const hoyStr = hoy.toISOString().split('T')[0]
-    const guardado = localStorage.getItem('lume_clases_profe')
-    
-    if (guardado) {
-      setClases(JSON.parse(guardado))
-    } else {
-      setClases([
-        {
-          id: "clase-mock-1",
-          nivel: "Pole Coreográfico",
-          horario: "19:00:00",
-          fecha: hoyStr,
-          estado_profe: 'pendiente', // 'pendiente', 'presente', 'ausente'
-          cupo_maximo: 15,
-          reservas: [
-            { id: "res-1", estado: "confirmada", presente_local: false, perfiles: { id: "alu-1", nombre: "Martina", apellido: "Gómez", telefono: "5491133445566", contacto_urgencia: "11-2222-3333 (Papá)", estado_cuota: "vencida" } },
-            { id: "res-2", estado: "confirmada", presente_local: true, perfiles: { id: "alu-2", nombre: "Sofía", apellido: "Rodríguez", telefono: "5491144556677", estado_cuota: "vencida" } }
-          ]
-        },
-        {
-          id: "clase-mock-2",
-          nivel: "Elongación Profunda",
-          horario: "20:30:00",
-          fecha: hoyStr,
-          estado_profe: 'pendiente',
-          cupo_maximo: 12,
-          reservas: []
-        }
-      ])
-    }
-    setCargando(false)
-  }, [])
+    const cargarDatos = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-  useEffect(() => {
-    if (isMounted) localStorage.setItem('lume_clases_profe', JSON.stringify(clases))
-  }, [clases, isMounted])
+      const { data: perfilOficial } = await supabase.from('usuarios').select('*').eq('id', user.id).single()
+      if (perfilOficial) {
+        setPerfil(perfilOficial)
+        
+        // --- TRAER CARTELERA DE AVISOS DE LA ACADEMIA ---
+        if (perfilOficial.academia_id) {
+          const { data: academia } = await supabase
+            .from('academias')
+            .select('eventos_cartelera')
+            .eq('id', perfilOficial.academia_id)
+            .single()
+
+          if (academia) {
+            const listaAvisos = typeof academia.eventos_cartelera === 'string'
+              ? JSON.parse(academia.eventos_cartelera)
+              : (academia.eventos_cartelera || [])
+            setEventos(listaAvisos)
+          }
+        }
+      }
+
+      // 1. Qué grupos (etiquetas) enseña este profe?
+      let flexProfe: any = {}
+      try { flexProfe = typeof perfilOficial?.datos_flexibles === 'string' ? JSON.parse(perfilOficial.datos_flexibles) : (perfilOficial?.datos_flexibles || {}) } catch(e){}
+      const etiquetasAsignadas = flexProfe.etiquetas_asignadas || []
+
+      // 2. Traer alumnos activos
+      const { data: alumnosData } = await supabase.from('usuarios').select('*').eq('rol', 'alumno').eq('activa', true)
+      
+      // 3. Cruzar datos: Filtrar a los alumnos que tengan alguna de las etiquetas del profe
+      if (alumnosData && etiquetasAsignadas.length > 0) {
+        const alumnosFiltrados = alumnosData.filter(a => {
+          let flexAlu: any = {}
+          try { flexAlu = typeof a.datos_flexibles === 'string' ? JSON.parse(a.datos_flexibles) : (a.datos_flexibles || {}) } catch(e){}
+          const tagsAlumno = flexAlu.etiquetas || []
+          // Retorna true si el alumno tiene al menos 1 etiqueta que el profe enseña
+          return tagsAlumno.some((t: string) => etiquetasAsignadas.includes(t))
+        })
+        setMisAlumnos(alumnosFiltrados.sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      }
+      
+      setCargando(false)
+    }
+    cargarDatos()
+  }, [supabase])
 
   if (!isMounted) return null
   if (cargando) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
 
-  // --- MÉTODOS DE CHECK-IN Y ASISTENCIA ---
-  const handleCheckIn = (claseId: string) => {
-    setClases(prev => prev.map(c => c.id === claseId ? { ...c, estado_profe: 'presente' } : c))
-    toast.success("¡Check-in registrado! Planilla de asistencia desbloqueada. 🚀")
-  }
-
-  const handleAvisarAusencia = (claseId: string) => {
-    toast("¿Reportar ausencia para esta clase?", {
-      description: "Se liberará el cupo para suplencias.",
-      action: {
-        label: "Sí, Reportar",
-        onClick: async () => {
-          setClases(prev => prev.map(c => c.id === claseId ? { ...c, estado_profe: 'ausente' } : c))
-          toast.error("Ausencia informada a la administración.")
-        }
-      },
-      cancel: { label: "Cancelar", onClick: () => {} }
-    })
-  }
-
-  const toggleAsistencia = (claseId: string, reservaId: string, estadoActual: boolean) => {
-    setClases(prev => prev.map(clase => {
-      if (clase.id !== claseId) return clase
-      return {
-        ...clase,
-        reservas: clase.reservas.map((res: any) => {
-          if (res.id !== reservaId) return res
-          return { ...res, presente_local: !estadoActual }
-        })
-      }
-    }))
-    toast.success(estadoActual ? "Asistencia cancelada" : "¡Asistencia guardada!")
-  }
-
-  const clasesHoy = clases.filter(c => isSameDay(parseISO(c.fecha), hoy))
+  const etiquetasAsignadas = perfil?.datos_flexibles?.etiquetas_asignadas || []
+  const avatarUrl = perfil?.datos_flexibles?.avatar_url
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in pb-12 text-foreground">
+    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in pb-12 text-foreground">
       
-      {/* Encabezado Principal */}
-      <div className="bg-primary/10 text-primary p-5 rounded-2xl border border-primary/20 flex items-center justify-between shadow-sm">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight uppercase italic leading-none">
-            ¡Hola, {perfil?.nombre || "Profesor"}!
-          </h1>
-          <p className="text-sm font-medium opacity-80 mt-1">
-            Agenda del día: {format(hoy, 'EEEE dd/MM', { locale: es })}
-          </p>
+      {/* HEADER DE BIENVENIDA (AHORA CON FOTO) */}
+      <div className="bg-primary/10 text-primary p-6 rounded-[2rem] border border-primary/20 flex flex-col md:flex-row md:items-center justify-between shadow-sm gap-4">
+        <div className="flex items-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-background border-4 border-primary/20 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Perfil" className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-2xl font-black text-primary">{perfil?.nombre?.charAt(0) || "P"}</span>
+            )}
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tight uppercase italic leading-none">
+              ¡Hola, {perfil?.nombre ? perfil.nombre.split(" ")[0] : "Profesor"}!
+            </h1>
+            <p className="text-sm font-medium opacity-80 mt-1">
+              Panel oficial de seguimiento deportivo.
+            </p>
+          </div>
         </div>
-        <CalendarCheck className="h-8 w-8 opacity-40" />
+        <div className="bg-background/50 backdrop-blur-sm px-4 py-3 rounded-xl text-center md:text-right border border-primary/10">
+          <p className="text-[10px] font-black uppercase tracking-widest text-primary/80">Fecha Actual</p>
+          <p className="font-bold text-sm">{format(hoy, 'EEEE dd/MM', { locale: es })}</p>
+        </div>
       </div>
 
-      {/* Listado de Clases Diarias */}
-      {clasesHoy.length === 0 ? (
-        <div className="bg-card border-2 border-dashed border-border rounded-2xl p-12 text-center space-y-3 shadow-sm">
-          <Clock className="h-10 w-10 text-muted-foreground/30 mx-auto" />
-          <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs italic">
-            No tenés clases asignadas hoy.
-          </p>
-        </div>
-      ) : (
-        clasesHoy.map(clase => {
-          const esAusente = clase.estado_profe === 'ausente'
-          const requiereCheckIn = clase.estado_profe === 'pendiente' && !esAusente
-          const hizoCheckIn = clase.estado_profe === 'presente'
-          
-          const activas = clase.reservas?.filter((r: any) => r.estado !== 'cancelada') || []
-          const canceladasUltimoMomento = clase.reservas?.filter((r: any) => r.estado === 'cancelada') || []
-          const totalPresentes = activas.filter((r: any) => r.presente_local).length
-          const estaExpandida = claseExpandida === clase.id
-
-          return (
-            <Card key={clase.id} className={`border shadow-sm overflow-hidden rounded-2xl relative ${esAusente ? 'border-destructive/30' : (requiereCheckIn ? 'border-amber-500/50 shadow-amber-500/10' : 'border-border')}`}>
-              
-              {/* Overlay de Ausencia */}
-              {esAusente && (
-                <div className="absolute inset-0 bg-background/90 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center text-center p-6 animate-in fade-in">
-                  <AlertCircle className="h-10 w-10 text-destructive mb-2 animate-bounce" />
-                  <h3 className="text-lg font-black uppercase tracking-tight">Licencia / Ausencia Registrada</h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mt-1">Has liberado esta franja horaria. Administración buscará un reemplazo.</p>
-                </div>
-              )}
-
-              {/* Barra de la clase (Tap para expandir) */}
-              <div className={`p-4 flex flex-col gap-3 transition-colors ${estaExpandida ? 'bg-secondary/40' : 'bg-card hover:bg-secondary/20'}`}>
-                <div 
-                  className="flex items-center justify-between cursor-pointer w-full"
-                  onClick={() => { if (!requiereCheckIn) setClaseExpandida(estaExpandida ? null : clase.id) }}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="bg-background border border-border rounded-xl px-3 py-2 text-center min-w-[65px] shadow-inner">
-                      <span className="font-black text-foreground text-base block">{clase.horario.slice(0,5)}</span>
-                      <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">HS</span>
-                    </div>
-                    <div>
-                      <h3 className="font-black text-foreground text-base uppercase tracking-tight flex items-center gap-2">
-                        {clase.nivel}
-                        {hizoCheckIn && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-                      </h3>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 font-medium">
-                        <Users className="h-3.5 w-3.5 text-primary" /> {totalPresentes}/{activas.length} {textos.badgePresente}s
-                      </p>
-                    </div>
-                  </div>
-                  {requiereCheckIn ? (
-                    <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse mr-2"></div>
-                  ) : (
-                    estaExpandida ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-
-                {/* BOTONES DE CHECK-IN DOCENTE */}
-                {requiereCheckIn && (
-                  <div className="flex gap-2 pt-2 mt-2 border-t border-border/50 animate-in fade-in">
-                    <Button 
-                      variant="outline" 
-                      onClick={(e) => { e.stopPropagation(); handleAvisarAusencia(clase.id) }}
-                      className="flex-1 border-destructive text-destructive hover:bg-destructive hover:text-white h-10 font-bold uppercase tracking-widest text-[10px]"
-                    >
-                      <CalendarX2 className="h-4 w-4 mr-1.5" /> Voy a Faltar
-                    </Button>
-                    <Button 
-                      onClick={(e) => { e.stopPropagation(); handleCheckIn(clase.id) }}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-10 font-bold uppercase tracking-widest text-[10px]"
-                    >
-                      <Hand className="h-4 w-4 mr-1.5" /> Dar Presente
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* LISTADO DE ALUMNAS (Desbloqueado) */}
-              {estaExpandida && !requiereCheckIn && (
-                <CardContent className="p-0 border-t border-border bg-background animate-in slide-in-from-top-2 duration-200">
-                  <div className="px-4 py-2 bg-secondary/20 border-b border-border text-[10px] font-bold text-muted-foreground flex justify-between uppercase tracking-wider">
-                    <span>Lista Oficial de {textos.pluralSujeros}</span>
-                    <span>Capacidad: {activas.length} / {clase.cupo_maximo}</span>
-                  </div>
-
-                  {activas.length === 0 ? (
-                    <p className="text-center text-muted-foreground italic py-6 text-sm bg-card">Sin registros confirmados para este bloque.</p>
-                  ) : (
-                    <ul className="divide-y divide-border bg-card">
-                      {activas.map((res: any, idx: number) => {
-                        const alumno = res.perfiles
-                        const esAnotadaExpandida = alumnaExpandida === res.id
-
-                        return (
-                          <li key={res.id} className="flex flex-col transition-colors hover:bg-secondary/10">
-                            <div className="flex items-center justify-between p-4 gap-3">
-                              
-                              <div className="flex items-center gap-3 min-w-0">
-                                <Button
-                                  variant={res.presente_local ? "default" : "outline"}
-                                  size="icon"
-                                  onClick={() => toggleAsistencia(clase.id, res.id, res.presente_local)}
-                                  className={`h-10 w-10 rounded-xl shrink-0 transition-all ${res.presente_local ? 'bg-primary text-primary-foreground shadow-md' : 'border-border'}`}
-                                >
-                                  <CheckCircle2 className="h-5 w-5" />
-                                </Button>
-                                <div className="min-w-0" onClick={() => setAlumnaExpandida(esAnotadaExpandida ? null : res.id)}>
-                                  <p className="font-bold text-sm text-foreground uppercase tracking-tight cursor-pointer hover:text-primary truncate">
-                                    {alumno?.nombre ? `${alumno.nombre} ${alumno.apellido || ''}` : alumno?.nombre_completo || textos.singularSujero}
-                                  </p>
-                                  <span className={`text-[9px] uppercase font-black tracking-widest flex items-center gap-1.5 mt-0.5 ${alumno?.estado_cuota === 'al_dia' ? 'text-emerald-500' : 'text-destructive'}`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${alumno?.estado_cuota === 'al_dia' ? 'bg-emerald-500' : 'bg-destructive animate-pulse'}`}></span>
-                                    {alumno?.estado_cuota === 'al_dia' ? 'Al Día' : 'Cuenta Deudora'}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Ficha Desplegable Alumna (Contacto Emergencia) */}
-                            {esAnotadaExpandida && (
-                              <div className="px-6 pb-5 pt-1 border-t border-border/50 bg-background/50 text-xs space-y-3 animate-in slide-in-from-top-1">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div className="space-y-0.5">
-                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-wider flex items-center gap-1"><Phone className="h-3 w-3" /> WhatsApp</p>
-                                    <p className="font-bold text-foreground">{alumno?.telefono || "No especificado"}</p>
-                                  </div>
-                                </div>
-                                <div className="mt-2 p-3 bg-destructive/5 rounded-xl border border-destructive/20 shadow-inner">
-                                  <p className="text-[9px] font-black text-destructive uppercase tracking-widest flex items-center gap-2">
-                                    <AlertCircle className="h-3.5 w-3.5 animate-pulse" /> Contacto Crítico / Emergencia
-                                  </p>
-                                  <p className="font-black text-destructive dark:text-red-400 text-xs uppercase mt-1">
-                                    {alumno?.contacto_urgencia || "⚠️ NO CARGADO POR LA ALUMNA"}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
-
-                  {/* Bajas de Último Momento */}
-                  {modeloNegocio === 'reservas' && canceladasUltimoMomento.length > 0 && (
-                    <div className="p-4 bg-destructive/5 border-t border-dashed border-border/60">
-                      <p className="text-[9px] font-black text-destructive uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                        <AlertCircle className="h-3.5 w-3.5" /> Cancelaciones recientes ({canceladasUltimoMomento.length})
-                      </p>
-                      <div className="space-y-1.5">
-                        {canceladasUltimoMomento.map((res: any) => (
-                          <div key={res.id} className="flex items-center gap-2 text-xs opacity-75">
-                            <UserMinus className="h-3.5 w-3.5 text-destructive shrink-0" />
-                            <span className="font-semibold text-foreground/80 line-through truncate uppercase">
-                              {res.perfiles?.nombre ? `${res.perfiles.nombre} ${res.perfiles.apellido || ''}` : res.perfiles?.nombre_completo}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              )}
+      {/* CARTELERA DE ANUNCIOS INSTITUCIONALES */}
+      <div className="space-y-4 pt-2">
+        <h2 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
+          <Megaphone className="h-4 w-4 text-primary" /> Cartelera de Avisos
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {eventos.length === 0 ? (
+            <Card className="col-span-1 md:col-span-2 bg-card border-2 border-dashed border-border rounded-2xl p-6 text-center text-muted-foreground italic text-xs font-bold uppercase tracking-widest">
+              No hay avisos recientes publicados por la administración.
             </Card>
-          )
-        })
+          ) : (
+            eventos.map((aviso: any) => (
+              <Card key={aviso.id} className="bg-card border border-border shadow-sm rounded-3xl overflow-hidden flex flex-col justify-between">
+                <div>
+                  {aviso.imagen_url && (
+                    <div className="w-full h-36 bg-secondary/20 border-b border-border">
+                      <img src={aviso.imagen_url} alt="Aviso" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div className="p-5">
+                    <h4 className="text-sm uppercase font-black tracking-tight">{aviso.titulo}</h4>
+                    <p className="font-medium text-xs whitespace-pre-wrap mt-1 text-foreground/80 leading-relaxed">
+                      {aviso.descripcion}
+                    </p>
+                  </div>
+                </div>
+                <div className="px-5 pb-4 pt-2 border-t border-border/20 text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                  Publicado el {new Date(aviso.fecha).toLocaleDateString('es-AR')}
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* GRUPOS A CARGO */}
+      <div className="pt-2">
+        <h2 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" /> Tus Grupos a Cargo
+        </h2>
+        {etiquetasAsignadas.length === 0 ? (
+          <div className="bg-card border-2 border-dashed border-border rounded-2xl p-8 text-center shadow-sm">
+            <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs italic">
+              La administración no te ha asignado categorías todavía.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {etiquetasAsignadas.map((tag: string) => (
+              <div key={tag} className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-700 dark:text-indigo-400 px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase shadow-sm">
+                {tag}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* LISTADO DE ALUMNOS (SOLO LECTURA) */}
+      {etiquetasAsignadas.length > 0 && (
+        <Card className="border-border shadow-sm rounded-3xl overflow-hidden bg-card mt-8">
+          <div className="p-5 border-b border-border bg-secondary/10 flex items-center justify-between">
+            <h3 className="font-black uppercase tracking-tight text-foreground flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-primary" /> Fichas Médicas & Roster ({misAlumnos.length})
+            </h3>
+          </div>
+          <CardContent className="p-0">
+            {misAlumnos.length === 0 ? (
+              <p className="text-center text-muted-foreground italic py-8 text-sm">No hay alumnos inscriptos en tus categorías.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {misAlumnos.map((alumno) => {
+                  const flex = alumno.datos_flexibles || {}
+                  const expandida = alumnaExpandida === alumno.id
+
+                  return (
+                    <li key={alumno.id} className="flex flex-col transition-colors hover:bg-secondary/5">
+                      <div className="flex items-center justify-between p-5 cursor-pointer" onClick={() => setAlumnaExpandida(expandida ? null : alumno.id)}>
+                        <div className="flex items-center gap-4">
+                          <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary font-black text-lg flex items-center justify-center shrink-0">
+                            {alumno.nombre.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm text-foreground uppercase tracking-tight">{alumno.nombre}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {(flex.etiquetas || []).filter((t:string) => etiquetasAsignadas.includes(t)).map((t:string) => (
+                                <span key={t} className="text-[8px] bg-secondary border border-border px-1.5 py-0.5 rounded uppercase font-bold tracking-widest">{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-black uppercase text-muted-foreground underline decoration-dashed opacity-50 hover:opacity-100 transition-opacity">
+                            {expandida ? 'Ocultar' : 'Ver Ficha'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {expandida && (
+                        <div className="px-5 pb-5 pt-2 bg-background/50 border-t border-border/30 space-y-4 animate-in slide-in-from-top-1">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-[9px] font-black text-muted-foreground uppercase tracking-wider flex items-center gap-1"><Phone className="h-3 w-3" /> WhatsApp Contacto</p>
+                              <p className="font-bold text-foreground text-sm">{alumno.telefono || "No especificado"}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[9px] font-black text-muted-foreground uppercase tracking-wider flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Estado Administrativo</p>
+                              <p className={`font-bold text-sm flex items-center gap-1.5 ${flex.estado_cuota === 'al_dia' ? 'text-emerald-500' : 'text-destructive'}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${flex.estado_cuota === 'al_dia' ? 'bg-emerald-500' : 'bg-destructive animate-pulse'}`}></span>
+                                {flex.estado_cuota === 'al_dia' ? 'Apta para entrenar' : 'Regularizar Deuda en Adm.'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="p-4 bg-destructive/5 rounded-xl border border-destructive/20 shadow-inner">
+                            <p className="text-[10px] font-black text-destructive uppercase tracking-widest flex items-center gap-2 mb-1">
+                              <AlertCircle className="h-3.5 w-3.5 animate-pulse" /> Ficha Médica / Urgencias
+                            </p>
+                            <p className="font-black text-destructive dark:text-red-400 text-sm uppercase">
+                              {flex.contacto_urgencia || "⚠️ SIN CONTACTO DE EMERGENCIA DECLARADO"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   )
