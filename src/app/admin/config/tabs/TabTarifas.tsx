@@ -1,3 +1,5 @@
+"use client"
+
 import { Plus, CreditCard, Pencil, Loader2, Trash2, X } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"

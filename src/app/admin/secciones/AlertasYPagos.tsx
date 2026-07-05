@@ -1,3 +1,5 @@
+"use client"
+
 import { AlertCircle, UserCheck, MessageCircle, Receipt } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -5,7 +7,6 @@ import { Button } from "@/components/ui/button"
 export default function AlertasYPagos({ deudores, ultimosPagos }: { deudores: any[], ultimosPagos: any[] }) {
   return (
     <div className="xl:col-span-1 space-y-6">
-      {/* COBRANZA AUTOMÁTICA */}
       <Card className="border-red-200 shadow-lg shadow-red-900/5 bg-white">
         <CardHeader className="p-5 border-b border-red-100 bg-red-50/50 rounded-t-xl">
           <div className="flex items-center gap-2 text-red-700">
@@ -23,7 +24,7 @@ export default function AlertasYPagos({ deudores, ultimosPagos }: { deudores: an
             ) : (
               deudores.map((alumno) => {
                 const tL = alumno.telefono ? String(alumno.telefono).replace(/\D/g, '') : ""
-                const msg = `Hola ${alumno.nombre.split(' ')[0]}, te escribimos de administración. Te recordamos que se encuentra pendiente el pago de tu cuota. ¡Avisanos cuando puedas regularizarlo! Gracias.`
+                const msg = `Hola, te escribimos de administración. Te recordamos que se encuentra pendiente la cuota de ${alumno.nombre.split(' ')[0]}. ¡Avisanos cuando puedas regularizarlo! Gracias.`
                 return (
                   <div key={alumno.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
                     <div className="flex-1 min-w-0 pr-4">
@@ -43,7 +44,6 @@ export default function AlertasYPagos({ deudores, ultimosPagos }: { deudores: an
         </CardContent>
       </Card>
 
-      {/* ÚLTIMOS COBROS */}
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="p-6 border-b border-slate-100 flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">

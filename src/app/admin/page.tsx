@@ -32,7 +32,7 @@ export default function AdminDashboardMainPage() {
       try {
         const [resPagos, resUsuarios, resTareas, resTarifas] = await Promise.all([
           supabase.from("pagos").select("monto, fecha, beneficiario, concepto_categoria, alumno_id").order("fecha", { ascending: false }),
-          supabase.from("usuarios").select("id, nombre, telefono, created_at, activa, datos_flexibles, titular_id, rol").eq("activa", true),
+          supabase.from("usuarios").select("*").eq("rol", "alumno"),
           supabase.from("tareas").select("*"),
           supabase.from("tarifas").select("precio").eq("tipo", "mensual")
         ])
@@ -48,11 +48,14 @@ export default function AdminDashboardMainPage() {
           promedioCuota = suma / tarifasBD.length
         }
 
-        let alDiaCount = 0; let enMoraCount = 0; let pausadasCount = 0;
+        let alDiaCount = 0; let enMoraCount = 0; let pausadasCount = 0; let alumnasActivas = 0;
         const morososList: any[] = []
         const diaActual = hoy.getDate(); const mesActual = hoy.getMonth(); const anioActual = hoy.getFullYear()
         const mesPasado = mesActual === 0 ? 11 : mesActual - 1
         const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
+
+        // CATEGORÍAS DE EGRESOS A EXCLUIR DE INGRESOS
+        const categoriasEgreso = ['HONORARIOS', 'ADELANTO_SUELDO', 'GASTO']
 
         const pagosMesActual = todosLosPagos.filter((p: any) => {
           const f = new Date(p.fecha)
@@ -63,8 +66,16 @@ export default function AdminDashboardMainPage() {
           return f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
         })
 
-        const totalMesActual = pagosMesActual.reduce((sum, p) => sum + Number(p.monto || 0), 0)
-        const totalMesAnterior = pagosMesAnterior.reduce((sum, p) => sum + Number(p.monto || 0), 0)
+        // SUMAMOS SOLO LOS QUE NO SON EGRESOS (Ingresos reales)
+        const totalMesActual = pagosMesActual.reduce((sum, p) => {
+          if (categoriasEgreso.includes(p.concepto_categoria)) return sum // No suma si es egreso
+          return sum + Number(p.monto || 0)
+        }, 0)
+        
+        const totalMesAnterior = pagosMesAnterior.reduce((sum, p) => {
+          if (categoriasEgreso.includes(p.concepto_categoria)) return sum
+          return sum + Number(p.monto || 0)
+        }, 0)
         
         let porcentaje = 0
         if (totalMesAnterior > 0) porcentaje = ((totalMesActual - totalMesAnterior) / totalMesAnterior) * 100
@@ -76,6 +87,7 @@ export default function AdminDashboardMainPage() {
         }).reverse()
 
         todosLosPagos.forEach(p => {
+          if (categoriasEgreso.includes(p.concepto_categoria)) return // No suma al gráfico si es egreso
           const f = new Date(p.fecha)
           const mesPagoStr = `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}`
           const index = ultimos6Meses.findIndex(m => m.mesStr === mesPagoStr)
@@ -83,10 +95,14 @@ export default function AdminDashboardMainPage() {
         })
 
         usuarios.forEach((u: any) => {
-          if (u.rol === "admin") return
+          if (u.activa === false) return; 
 
           let flex: any = {}
           try { flex = typeof u.datos_flexibles === 'string' ? JSON.parse(u.datos_flexibles) : (u.datos_flexibles || {}) } catch (e) {}
+
+          if (u.role_campo_alternativo === 'profesor' || flex.role_campo_alternativo === 'profesor' || flex.rol === 'profesor') return;
+
+          alumnasActivas++; 
 
           if (flex.pausado === true || flex.estado_suscripcion === "pausado") {
             pausadasCount++
@@ -94,9 +110,15 @@ export default function AdminDashboardMainPage() {
           }
 
           let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
+          let telefonoContacto = u.telefono
+
           if (u.titular_id) {
             const tutor = usuarios.find((t: any) => t.id === u.titular_id)
-            if (tutor?.datos_flexibles?.dia_vencimiento) diaVencimiento = parseInt(tutor.datos_flexibles.dia_vencimiento)
+            if (tutor) {
+              const tFlex = typeof tutor.datos_flexibles === 'string' ? JSON.parse(tutor.datos_flexibles) : (tutor.datos_flexibles || {})
+              if (tFlex?.dia_vencimiento) diaVencimiento = parseInt(tFlex.dia_vencimiento)
+              if (!telefonoContacto && tutor.telefono) telefonoContacto = tutor.telefono
+            }
           }
 
           const pagosPropios = todosLosPagos.filter((p: any) => {
@@ -114,28 +136,36 @@ export default function AdminDashboardMainPage() {
             return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
           })
 
-          let estaAlDia = false
-          if (pagosPropios.length === 0) estaAlDia = false
-          else if (tienePagoEsteMes) estaAlDia = true
-          else if (!tienePagoMesAnterior) estaAlDia = false
-          else estaAlDia = diaActual <= diaVencimiento
+          let estadoCalculado = 'deuda'
+          if (pagosPropios.length === 0) {
+            estadoCalculado = 'deuda'
+          } else if (tienePagoEsteMes) {
+            estadoCalculado = 'al_dia'
+          } else if (!tienePagoMesAnterior) {
+            estadoCalculado = 'deuda'
+          } else {
+            estadoCalculado = diaActual <= diaVencimiento ? 'al_dia' : 'deuda'
+          }
 
-          if (estaAlDia) {
+          if (estadoCalculado === 'al_dia') {
             alDiaCount++
           } else {
             enMoraCount++
+            let estadoStr = pagosPropios.length === 0 ? "Ingreso Nuevo • Pendiente" : `Vencido el ${diaVencimiento}`
             morososList.push({
-              id: u.id, nombre: u.nombre, telefono: u.telefono, 
-              detalle: pagosPropios.length === 0 ? "Ingreso Nuevo • Pendiente" : `Vencido el ${diaVencimiento}`
+              id: u.id, nombre: u.nombre, telefono: telefonoContacto, detalle: estadoStr
             })
           }
         })
 
+        // FILTRAMOS LOS ÚLTIMOS COBROS PARA QUE SOLO SEAN INGRESOS REALES (no adelantos de sueldo)
+        const ingresosRecientes = pagosMesActual.filter(p => !categoriasEgreso.includes(p.concepto_categoria))
+
         setMetricas({
           recaudacionMes: totalMesActual, recaudacionAnterior: totalMesAnterior, crecimientoPorcentaje: Math.round(porcentaje),
-          dineroEnCalle: enMoraCount * promedioCuota, totalAlumnasActivas: usuarios.filter(usr => usr.rol !== "admin").length,
+          dineroEnCalle: enMoraCount * promedioCuota, totalAlumnasActivas: alumnasActivas,
           alumnasAlDia: alDiaCount, alumnasEnMora: enMoraCount, alumnasPausadas: pausadasCount,
-          listaDeudores: morososList, ultimosPagos: pagosMesActual.slice(0, 5), graficoEvolucion: ultimos6Meses
+          listaDeudores: morososList, ultimosPagos: ingresosRecientes.slice(0, 5), graficoEvolucion: ultimos6Meses
         })
       } catch (error) {
         console.error("Error al sincronizar el tablero:", error)

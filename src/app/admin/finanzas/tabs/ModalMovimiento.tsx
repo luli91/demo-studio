@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { createClient } from "@/lib/supabase"
 import { Plus, Minus, X, CheckSquare, Loader2 } from "lucide-react"

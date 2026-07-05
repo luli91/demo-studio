@@ -1,3 +1,5 @@
+"use client"
+
 import { UserMinus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -15,13 +17,14 @@ export default function TabDeudores({ deudores }: { deudores: any[] }) {
           ) : (
             deudores.map((deuda) => {
               const telLimpio = deuda.telefono ? deuda.telefono.replace(/\D/g, '') : "";
-              const mensaje = `Hola ${deuda.nombre.split(' ')[0]}, te escribimos desde administración. Te recordamos que tenés una cuota pendiente. ¡Avisanos cuando realices el pago!`;
+              const mensaje = `Hola, te escribimos desde administración. Te recordamos que se encuentra pendiente la cuota mensual de ${deuda.nombre}. ¡Avisanos cuando puedas realizar el pago! Muchas gracias.`;
               const linkWhatsApp = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensaje)}`;
+              
               return (
                 <div key={deuda.id} className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors">
                   <div>
                     <p className="font-bold text-foreground">{deuda.nombre}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Tel: {deuda.telefono || "Sin teléfono"}</p>
+                    <p className="text-xs text-destructive mt-1 font-bold">{deuda.detalle}</p>
                   </div>
                   <div className="flex items-center gap-4">
                     {telLimpio ? (
@@ -29,7 +32,7 @@ export default function TabDeudores({ deudores }: { deudores: any[] }) {
                         <Button variant="outline" className="border-emerald-600 text-emerald-600 hover:bg-emerald-600 hover:text-white font-bold text-xs">Enviar WhatsApp</Button>
                       </a>
                     ) : (
-                      <span className="text-xs text-muted-foreground italic">Sin celular</span>
+                      <span className="text-xs text-muted-foreground italic bg-secondary px-2 py-1 rounded-md">Sin celular</span>
                     )}
                   </div>
                 </div>

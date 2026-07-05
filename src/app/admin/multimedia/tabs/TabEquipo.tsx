@@ -1,3 +1,5 @@
+"use client"
+
 import { UploadCloud, Loader2, Users, Trash2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"

@@ -44,7 +44,8 @@ export default function FinanzasDashboard() {
       setCargando(true)
       const [resPagos, resUsuarios, resMovCaja, resTarifas] = await Promise.all([
         supabase.from('pagos').select('*').order('fecha', { ascending: false }),
-        supabase.from('usuarios').select('id, nombre, telefono, datos_flexibles, titular_id, rol').eq('activa', true),
+        // FIX CLAVE: Traemos a los alumnos sin ignorar los que tienen null
+        supabase.from('usuarios').select('*').eq('rol', 'alumno'),
         supabase.from('movimientos_caja').select('*').order('fecha', { ascending: false }),
         supabase.from('tarifas').select('precio').eq('tipo', 'mensual') 
       ])
@@ -82,23 +83,34 @@ export default function FinanzasDashboard() {
       const [anioSel, mesSel] = mesSeleccionado.split('-')
       
       usu.forEach((u: any) => {
-        if (u.rol === "admin" || u.rol === "profesor") return 
+        if (u.activa === false) return; // Ignorar archivados
+
         let flex: any = {}
         try { flex = typeof u.datos_flexibles === 'string' ? JSON.parse(u.datos_flexibles) : (u.datos_flexibles || {}) } catch (e) {}
-        if (flex.pausado === true) return
+        
+        // Excluir profesores
+        if (u.role_campo_alternativo === 'profesor' || flex.role_campo_alternativo === 'profesor' || flex.rol === 'profesor') return;
 
-        const pagosHistorialTotal = pag.filter(p => p.alumno_id === u.id || (u.titular_id && p.alumno_id === u.titular_id))
+        if (flex.pausado === true || flex.estado_suscripcion === "pausado") return
+
         let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
+        let telefonoContacto = u.telefono
         
         if (u.titular_id) {
           const tutor = usu.find((t: any) => t.id === u.titular_id)
-          if (tutor?.datos_flexibles) {
-            const tFlex = typeof tutor.datos_flexibles === 'string' ? JSON.parse(tutor.datos_flexibles) : tutor.datos_flexibles
+          if (tutor) {
+            const tFlex = typeof tutor.datos_flexibles === 'string' ? JSON.parse(tutor.datos_flexibles) : (tutor.datos_flexibles || {})
             if (tFlex?.dia_vencimiento) diaVencimiento = parseInt(tFlex.dia_vencimiento)
+            if (!telefonoContacto && tutor.telefono) telefonoContacto = tutor.telefono
           }
         }
 
-        const tienePagoEsteMes = pagosHistorialTotal.some((p: any) => {
+        const pagosPropios = pag.filter((p: any) => {
+          if (p.alumno_id === u.id) return true
+          return p.beneficiario && p.beneficiario.includes(u.nombre) // MISMA LOGICA ALUMNOS PAGE
+        })
+
+        const tienePagoEsteMes = pagosPropios.some((p: any) => {
           const f = new Date(p.fecha)
           return p.concepto_categoria === 'CUOTA' && f.getMonth() === (Number(mesSel)-1) && f.getFullYear() === Number(anioSel)
         })
@@ -107,13 +119,36 @@ export default function FinanzasDashboard() {
         const mesActualReal = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
         let estaAlDia = false
         
-        if (pagosHistorialTotal.length === 0) estaAlDia = false
-        else if (tienePagoEsteMes) estaAlDia = true
-        else if (mesSeleccionado === mesActualReal) estaAlDia = hoy.getDate() <= diaVencimiento
-        else if (mesSeleccionado > mesActualReal) estaAlDia = true 
-        else estaAlDia = false 
+        if (pagosPropios.length === 0) {
+          estaAlDia = false
+        } else if (tienePagoEsteMes) {
+          estaAlDia = true
+        } else if (mesSeleccionado === mesActualReal) {
+          // Si estamos viendo el mes actual y todavía no venció, revisa si debe meses anteriores
+          const mesPasado = hoy.getMonth() === 0 ? 11 : hoy.getMonth() - 1
+          const anioMesPasado = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear()
+          const tienePagoMesAnterior = pagosPropios.some((p: any) => {
+            const f = new Date(p.fecha)
+            return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
+          })
+          
+          if (!tienePagoMesAnterior) {
+            estaAlDia = false
+          } else {
+            estaAlDia = hoy.getDate() <= diaVencimiento
+          }
+        } else if (mesSeleccionado > mesActualReal) {
+          estaAlDia = true 
+        } else {
+          estaAlDia = false 
+        }
 
-        if (!estaAlDia) morososList.push(u)
+        if (!estaAlDia) {
+          let estadoStr = pagosPropios.length === 0 ? "Ingreso Nuevo • Pendiente" : `Vencido el ${diaVencimiento}`
+          morososList.push({
+            id: u.id, nombre: u.nombre, telefono: telefonoContacto, detalle: estadoStr
+          })
+        }
       })
       setDeudoresDelMes(morososList)
 
@@ -133,7 +168,6 @@ export default function FinanzasDashboard() {
     return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}` === mesSeleccionado
   })
 
-  // Los totales ahora dan exactos porque el mapeo ya le puso "egreso" a los sueldos
   const totalIngresos = movimientosFiltrados.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + Number(curr.monto), 0)
   const totalEgresos = movimientosFiltrados.filter(m => m.tipo === 'egreso').reduce((acc, curr) => acc + Number(curr.monto), 0)
   const resultadoNeto = totalIngresos - totalEgresos
@@ -153,7 +187,6 @@ export default function FinanzasDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in pb-12 max-w-6xl mx-auto relative">
-      {/* CABECERA */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print:hidden bg-card p-6 rounded-2xl border border-border shadow-sm">
         <div>
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight flex items-center gap-3">
@@ -178,14 +211,12 @@ export default function FinanzasDashboard() {
         </div>
       </div>
 
-      {/* TABS SELECTOR */}
       <div className="flex gap-2 overflow-x-auto pb-2 border-b border-border print:hidden">
         <button onClick={() => setPestañaActiva('resumen')} className={`px-4 py-2 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors whitespace-nowrap ${pestañaActiva === 'resumen' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>Flujo y Proyección</button>
         {modeloNegocio === 'mensual' && <button onClick={() => setPestañaActiva('deudas')} className={`px-4 py-2 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors whitespace-nowrap ${pestañaActiva === 'deudas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>Por Cobrar</button>}
         <button onClick={() => setPestañaActiva('proveedores')} className={`px-4 py-2 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors whitespace-nowrap ${pestañaActiva === 'proveedores' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>Checklist de Gastos Fijos</button>
       </div>
 
-      {/* RENDERS */}
       {cargando ? (
         <div className="py-12 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : (

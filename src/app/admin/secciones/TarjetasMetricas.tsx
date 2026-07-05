@@ -1,3 +1,5 @@
+"use client"
+
 import { DollarSign, TrendingUp, TrendingDown, Users, PauseCircle, UserCheck, UserMinus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 

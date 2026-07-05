@@ -1,3 +1,5 @@
+"use client"
+
 import { Save, ExternalLink, UploadCloud, Loader2, Image as ImageIcon, Copy } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"

@@ -1,3 +1,5 @@
+"use client"
+
 import { TrendingUp, Clock, TrendingDown, Wallet, Printer, Plus, Minus, ReceiptText } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"

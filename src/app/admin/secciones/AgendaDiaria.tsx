@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { createClient } from "@/lib/supabase"
 import { StickyNote, PlusCircle, CheckCircle2, Circle, Clock4, Trash2, AlertCircle } from "lucide-react"

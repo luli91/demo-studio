@@ -1,3 +1,5 @@
+"use client"
+
 import { Clock, AlertCircle } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 
