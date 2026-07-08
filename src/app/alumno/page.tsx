@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Clock, AlertCircle, CheckCircle2, Loader2, Users, Megaphone } from "lucide-react"
+import { Clock, AlertCircle, CheckCircle2, Loader2, Users, Megaphone, Star } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 
@@ -19,13 +19,15 @@ export default function PanelAlumnoPage() {
   const [usaReservas, setUsaReservas] = useState<boolean>(true)
   const [proximasClases, setProximasClases] = useState<any[]>([])
   const [eventos, setEventos] = useState<any[]>([])
+  
+  // NUEVO ESTADO PARA SPONSORS
+  const [patrocinadores, setPatrocinadores] = useState<any[]>([])
 
   useEffect(() => {
     const obtenerDatos = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push("/login"); return; }
 
-      // 1. Traemos la ficha del usuario principal
       const { data: perfilOficial, error } = await supabase.from('usuarios').select('*').eq('id', user.id).single()
       if (error || !perfilOficial) {
         toast.error("No se encontró tu ficha.")
@@ -37,7 +39,6 @@ export default function PanelAlumnoPage() {
         return 
       }
 
-      // 2. Traemos la configuración de la Academia
       if (perfilOficial.academia_id) {
         const { data: academia } = await supabase
           .from('academias')
@@ -54,18 +55,31 @@ export default function PanelAlumnoPage() {
         }
       }
 
-      // 3. Traemos a los hijos vinculados
+      // NUEVA CONSULTA: Traemos a los sponsors activos
+      const { data: listaSponsors } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('rol', 'sponsor')
+        .eq('activa', true)
+      
+      if (listaSponsors) {
+        // Solo guardamos los que tienen el "mostrar_app" en true (o que no lo tienen definido, por retrocompatibilidad)
+        const sponsorsPublicos = listaSponsors.filter(sp => {
+          const flex = typeof sp.datos_flexibles === 'string' ? JSON.parse(sp.datos_flexibles) : (sp.datos_flexibles || {})
+          return flex.mostrar_app !== false
+        })
+        setPatrocinadores(sponsorsPublicos)
+      }
+
       const { data: hijos } = await supabase.from('usuarios').select('*').eq('titular_id', perfilOficial.id)
       
       const todosLosFamiliares = [perfilOficial, ...(hijos || [])]
       const idsFamiliares = todosLosFamiliares.map(f => f.id)
 
-      // 4. EL CEREBRO MATEMÁTICO: Traemos los pagos del mes en curso para evaluar la deuda real
       const hoy = new Date()
       const mesActual = hoy.getMonth()
       const anioActual = hoy.getFullYear()
 
-      // Traemos TODOS los pagos de la familia de cualquier fecha (para ver si son alumnos nuevos)
       const { data: historialPagos } = await supabase
         .from('pagos')
         .select('alumno_id, concepto_categoria, fecha, beneficiario')
@@ -73,12 +87,10 @@ export default function PanelAlumnoPage() {
       
       const pagos = historialPagos || []
 
-      // Función inteligente para evaluar el estado real de cada familiar
       const evaluarEstadoReal = (usuario: any) => {
         let flex: any = {}
         try { flex = typeof usuario.datos_flexibles === 'string' ? JSON.parse(usuario.datos_flexibles) : (usuario.datos_flexibles || {}) } catch (e) {}
 
-        // REGLA DE ORO FAMILIAR APLICADA AL PANEL DEL ALUMNO
         const pagosDelUsuario = pagos.filter((p: any) => {
           if (p.alumno_id === usuario.id) return true; 
           
@@ -89,17 +101,14 @@ export default function PanelAlumnoPage() {
         })
         
         let diaVencimiento = flex.dia_vencimiento ? parseInt(flex.dia_vencimiento) : 10
-        // Si es menor hereda vencimiento del tutor
         if (usuario.titular_id && perfilOficial.datos_flexibles) {
           const tutorFlex = typeof perfilOficial.datos_flexibles === 'string' ? JSON.parse(perfilOficial.datos_flexibles) : perfilOficial.datos_flexibles
           if (tutorFlex.dia_vencimiento) diaVencimiento = parseInt(tutorFlex.dia_vencimiento)
         }
 
-        // 1. Calculamos cuál fue el mes anterior para la validación
         const mesPasado = mesActual === 0 ? 11 : mesActual - 1
         const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
 
-        // 2. Buscamos si pagó este mes o el anterior
         const tienePagoEsteMes = pagosDelUsuario.some((p: any) => {
           const f = new Date(p.fecha)
           return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
@@ -110,16 +119,14 @@ export default function PanelAlumnoPage() {
           return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
         })
 
-        // 3. La Regla de Oro Definitiva (con returns directos)
-        if (pagosDelUsuario.length === 0) return "vencida" // Alumno nuevo siempre arranca debiendo
-        if (tienePagoEsteMes) return "al_dia" // Ya pagó la cuota de este mes
-        if (!tienePagoMesAnterior) return "vencida" // Debe el mes pasado, no tiene derecho a período de gracia
-        if (hoy.getDate() <= diaVencimiento) return "al_dia" // Tiene el mes pasado al día y estamos en período de gracia (ej: del 1 al 10)
+        if (pagosDelUsuario.length === 0) return "vencida" 
+        if (tienePagoEsteMes) return "al_dia" 
+        if (!tienePagoMesAnterior) return "vencida" 
+        if (hoy.getDate() <= diaVencimiento) return "al_dia" 
         
-        return "vencida" // Se le pasó el día de vencimiento y no pagó el mes actual
-      } // <--- LLAVE CERRADA
+        return "vencida" 
+      }
 
-      // 5. Armamos la lista mapeada ya con el estado calculado en vivo
       const datosPadre = {
         id: perfilOficial.id,
         nombre: perfilOficial.nombre,
@@ -127,7 +134,7 @@ export default function PanelAlumnoPage() {
         telefono: perfilOficial.telefono,
         avatar_url: perfilOficial.datos_flexibles?.avatar_url || null, 
         entrena: perfilOficial.activa !== false,
-        estado_cuota: evaluarEstadoReal(perfilOficial), // <-- CÁLCULO EN VIVO
+        estado_cuota: evaluarEstadoReal(perfilOficial), 
         creditos: perfilOficial.datos_flexibles?.creditos_clases || 0
       }
 
@@ -135,7 +142,7 @@ export default function PanelAlumnoPage() {
         id: h.id, 
         nombre: h.nombre, 
         avatar_url: h.datos_flexibles?.avatar_url || null,
-        estado_cuota: evaluarEstadoReal(h), // <-- CÁLCULO EN VIVO
+        estado_cuota: evaluarEstadoReal(h), 
         creditos: h.datos_flexibles?.creditos_clases || 0
       }))
 
@@ -310,7 +317,6 @@ export default function PanelAlumnoPage() {
           </div>
         )}
 
-        {/* CARTELERA DIGITAL ACTUALIZADA: RENDERIZA LA GRID COMPLETA DE AVISOS REALES */}
         <div className="space-y-4 mt-12">
           <h3 className="text-sm font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
             <Megaphone className="h-4 w-4" /> Avisos de la Institución
@@ -344,6 +350,47 @@ export default function PanelAlumnoPage() {
             )}
           </div>
         </div>
+
+        {/* NUEVA ZONA: BANNER DE SPONSORS */}
+        {patrocinadores.length > 0 && (
+          <div className="mt-16 pt-8 border-t border-border/50">
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <Star className="h-4 w-4 text-amber-500" fill="currentColor" />
+              <h3 className="text-xs font-black text-muted-foreground uppercase tracking-widest text-center">
+                Apoyan a nuestra academia
+              </h3>
+              <Star className="h-4 w-4 text-amber-500" fill="currentColor" />
+            </div>
+            
+            <div className="flex flex-wrap justify-center gap-6">
+              {patrocinadores.map((sponsor) => {
+                const flex = typeof sponsor.datos_flexibles === 'string' ? JSON.parse(sponsor.datos_flexibles) : (sponsor.datos_flexibles || {})
+                const ContenedorSponsor = flex.link ? 'a' : 'div'
+                
+                return (
+                  <ContenedorSponsor 
+                    key={sponsor.id} 
+                    href={flex.link || undefined} 
+                    target={flex.link ? "_blank" : undefined}
+                    rel="noopener noreferrer"
+                    className={`flex flex-col items-center gap-3 w-[120px] ${flex.link ? 'hover:scale-105 transition-transform cursor-pointer' : ''}`}
+                  >
+                    <div className="w-20 h-20 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-2">
+                      {flex.logo_url ? (
+                        <img src={flex.logo_url} alt={sponsor.nombre} className="max-w-full max-h-full object-contain mix-blend-multiply" />
+                      ) : (
+                        <span className="font-black text-slate-300 text-3xl uppercase">{sponsor.nombre.charAt(0)}</span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold text-center text-muted-foreground uppercase tracking-wide leading-tight px-2">
+                      {sponsor.nombre}
+                    </span>
+                  </ContenedorSponsor>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

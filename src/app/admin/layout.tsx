@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase"
-import { LayoutDashboard, Users, CalendarDays, Image as ImageIcon, Wallet, Settings, LogOut, Menu, X, GraduationCap } from "lucide-react"
+import { LayoutDashboard, Users, CalendarDays, Image as ImageIcon, Wallet, Settings, LogOut, Menu, X, GraduationCap, Megaphone } from "lucide-react"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -21,9 +21,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: "Dashboard", path: "/admin", icon: <LayoutDashboard className="h-5 w-5" /> },
     { label: "Directorio", path: "/admin/alumnos", icon: <Users className="h-5 w-5" /> },
     { label: "Staff", path: "/admin/staff", icon: <GraduationCap className="h-5 w-5" /> },
-    //{ label: "Grilla", path: "/admin/clases", icon: <CalendarDays className="h-5 w-5" /> },
-    //{ label: "Multimedia", path: "/admin/multimedia", icon: <ImageIcon className="h-5 w-5" /> },
     { label: "Finanzas", path: "/admin/finanzas", icon: <Wallet className="h-5 w-5" /> },
+    { label: "Sponsors", path: "/admin/sponsors", icon: <Megaphone className="h-5 w-5" /> },
     { label: "Configuración", path: "/admin/config", icon: <Settings className="h-5 w-5" /> },
   ]
 
@@ -46,7 +45,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         />
       )}
 
-      {/* Sidebar de Admin (Estilo Dark de Flor) */}
       <aside className={`fixed top-0 left-0 h-screen w-64 bg-slate-950 text-slate-50 p-8 flex flex-col z-40 transform transition-transform duration-300 ${menuAbierto ? "translate-x-0" : "-translate-x-full"} md:relative md:translate-x-0 shadow-xl border-r border-border/10`}>
         <div className="mb-10 flex flex-col items-center text-center">
           <div className="h-12 w-12 bg-primary/20 text-primary rounded-xl flex items-center justify-center mb-3">

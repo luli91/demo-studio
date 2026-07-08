@@ -238,7 +238,7 @@ export default function ConfiguracionAdminPage() {
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight italic flex items-center gap-3">
             <Settings className="h-8 w-8 text-primary" /> Configuración Global
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium">Gestión de identidad, tarifas y reglas operativas del sistema.</p>
+          <p className="text-muted-foreground mt-1 font-medium">Gestión de identidad, tarifas y anuncios.</p>
         </div>
       </div>
 
