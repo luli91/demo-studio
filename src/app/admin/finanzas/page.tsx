@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase"
-import { Wallet, Loader2 } from "lucide-react"
+import { Wallet, Loader2, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import Link from "next/link"
 
 // Importaciones locales de las pestañas estructuradas
 import TabFlujoCaja from "./tabs/TabFlujoCaja"
@@ -14,7 +15,9 @@ import ModalMovimiento from "./tabs/ModalMovimiento"
 
 export default function FinanzasDashboard() {
   const supabase = createClient()
-  const modeloNegocio = "mensual" 
+  
+  // AHORA ES UN ESTADO DINÁMICO
+  const [modeloNegocio, setModeloNegocio] = useState<string>("mensual") 
   
   const generarMeses = () => {
     const meses = []
@@ -42,12 +45,16 @@ export default function FinanzasDashboard() {
   const cargarCajaReal = async () => {
     try {
       setCargando(true)
+
+      const { data: aca } = await supabase.from('academias').select('modelo_negocio').limit(1).single()
+      const modeloActivo = aca?.modelo_negocio || "mensual"
+      setModeloNegocio(modeloActivo)
+
       const [resPagos, resUsuarios, resMovCaja, resTarifas] = await Promise.all([
         supabase.from('pagos').select('*').order('fecha', { ascending: false }),
-        // FIX CLAVE: Traemos a los alumnos sin ignorar los que tienen null
         supabase.from('usuarios').select('*').eq('rol', 'alumno'),
         supabase.from('movimientos_caja').select('*').order('fecha', { ascending: false }),
-        supabase.from('tarifas').select('precio').eq('tipo', 'mensual') 
+        supabase.from('tarifas').select('precio').eq('tipo', modeloActivo) // SE FILTRA DINÁMICAMENTE
       ])
 
       const tarifasGuardadas = resTarifas.data || []
@@ -88,7 +95,6 @@ export default function FinanzasDashboard() {
         let flex: any = {}
         try { flex = typeof u.datos_flexibles === 'string' ? JSON.parse(u.datos_flexibles) : (u.datos_flexibles || {}) } catch (e) {}
         
-        // Excluir profesores
         if (u.role_campo_alternativo === 'profesor' || flex.role_campo_alternativo === 'profesor' || flex.rol === 'profesor') return;
 
         if (flex.pausado === true || flex.estado_suscripcion === "pausado") return
@@ -107,7 +113,7 @@ export default function FinanzasDashboard() {
 
         const pagosPropios = pag.filter((p: any) => {
           if (p.alumno_id === u.id) return true
-          return p.beneficiario && p.beneficiario.includes(u.nombre) // MISMA LOGICA ALUMNOS PAGE
+          return p.beneficiario && p.beneficiario.includes(u.nombre) 
         })
 
         const tienePagoEsteMes = pagosPropios.some((p: any) => {
@@ -124,7 +130,6 @@ export default function FinanzasDashboard() {
         } else if (tienePagoEsteMes) {
           estaAlDia = true
         } else if (mesSeleccionado === mesActualReal) {
-          // Si estamos viendo el mes actual y todavía no venció, revisa si debe meses anteriores
           const mesPasado = hoy.getMonth() === 0 ? 11 : hoy.getMonth() - 1
           const anioMesPasado = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear()
           const tienePagoMesAnterior = pagosPropios.some((p: any) => {
@@ -189,6 +194,7 @@ export default function FinanzasDashboard() {
     <div className="space-y-8 animate-in fade-in pb-12 max-w-6xl mx-auto relative">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print:hidden bg-card p-6 rounded-2xl border border-border shadow-sm">
         <div>
+          <Link href="/admin/dashboard"><Button variant="ghost" className="mb-2 -ml-4 text-muted-foreground"><ArrowLeft className="h-4 w-4 mr-2" /> Volver al Dashboard</Button></Link>
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight flex items-center gap-3">
             <Wallet className="h-8 w-8 text-primary" /> Finanzas
           </h1>

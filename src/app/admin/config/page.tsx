@@ -13,7 +13,9 @@ import TabReglas from "./tabs/TabReglas"
 
 export default function ConfiguracionAdminPage() {
   const supabase = createClient()
-  const modeloNegocio = "mensual" 
+  
+  // SOLUCIÓN: Cambiado a estado dinámico
+  const [modeloNegocio, setModeloNegocio] = useState<string>("mensual") 
   const esMensual = modeloNegocio === "mensual"
 
   const [pestañaActiva, setPestañaActiva] = useState<'institucional' | 'cartelera' | 'tarifas' | 'reglas'>('institucional')
@@ -49,6 +51,8 @@ export default function ConfiguracionAdminPage() {
         const { data, error } = await supabase.from('academias').select('*').limit(1).single()
         if (data) {
           setAcademiaId(data.id)
+          if (data.modelo_negocio) setModeloNegocio(data.modelo_negocio) // ASIGNACIÓN DINÁMICA DE LA DB
+          
           setInfoAcademia({
             nombre_largo: data.nombre || "", nombre_corto: data.nombre_corto || data.nombre || "", siglas: data.siglas || "", slug: data.slug || "", 
             admin_nombre: data.admin_nombre || "Administración", logo_url: data.logo_url || "", firma_url: data.firma_url || "", eventos_cartelera: data.eventos_cartelera || []
@@ -211,7 +215,7 @@ export default function ConfiguracionAdminPage() {
             const { error } = await supabase.from('tarifas').delete().eq('id', tarifaEditando.id)
             if (error) throw error
             setTarifas(tarifas.filter(t => t.id !== tarifaEditando.id))
-            toast.success("Tarifa eliminada.")
+            toast.success("Tarifa eliminado.")
             setModalTarifa(false)
           } catch (error: any) {
             toast.error("Error al eliminar tarifa.")
@@ -224,12 +228,10 @@ export default function ConfiguracionAdminPage() {
     })
   }
 
-  // === RENDERIZADO VISUAL ===
   if (cargandoInfo) return <div className="flex h-[70vh] justify-center items-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
   return (
     <div className="space-y-8 animate-in fade-in pb-12 max-w-5xl mx-auto">
-      
       {/* CABECERA */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>

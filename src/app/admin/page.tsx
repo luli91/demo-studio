@@ -30,11 +30,14 @@ export default function AdminDashboardMainPage() {
   useEffect(() => {
     const cargarDashboardYDB = async () => {
       try {
+        const { data: aca } = await supabase.from('academias').select('modelo_negocio').limit(1).single()
+        const modeloActivo = aca?.modelo_negocio || "mensual"
+
         const [resPagos, resUsuarios, resTareas, resTarifas] = await Promise.all([
           supabase.from("pagos").select("monto, fecha, beneficiario, concepto_categoria, alumno_id").order("fecha", { ascending: false }),
           supabase.from("usuarios").select("*").eq("rol", "alumno"),
           supabase.from("tareas").select("*"),
-          supabase.from("tarifas").select("precio").eq("tipo", "mensual")
+          supabase.from("tarifas").select("precio").eq("tipo", modeloActivo) // FILTRADO DINÁMICO
         ])
         
         const usuarios = resUsuarios.data || []
@@ -54,7 +57,6 @@ export default function AdminDashboardMainPage() {
         const mesPasado = mesActual === 0 ? 11 : mesActual - 1
         const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
 
-        // CATEGORÍAS DE EGRESOS A EXCLUIR DE INGRESOS
         const categoriasEgreso = ['HONORARIOS', 'ADELANTO_SUELDO', 'GASTO']
 
         const pagosMesActual = todosLosPagos.filter((p: any) => {
@@ -66,9 +68,8 @@ export default function AdminDashboardMainPage() {
           return f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
         })
 
-        // SUMAMOS SOLO LOS QUE NO SON EGRESOS (Ingresos reales)
         const totalMesActual = pagosMesActual.reduce((sum, p) => {
-          if (categoriasEgreso.includes(p.concepto_categoria)) return sum // No suma si es egreso
+          if (categoriasEgreso.includes(p.concepto_categoria)) return sum 
           return sum + Number(p.monto || 0)
         }, 0)
         
@@ -87,7 +88,7 @@ export default function AdminDashboardMainPage() {
         }).reverse()
 
         todosLosPagos.forEach(p => {
-          if (categoriasEgreso.includes(p.concepto_categoria)) return // No suma al gráfico si es egreso
+          if (categoriasEgreso.includes(p.concepto_categoria)) return 
           const f = new Date(p.fecha)
           const mesPagoStr = `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}`
           const index = ultimos6Meses.findIndex(m => m.mesStr === mesPagoStr)
@@ -158,7 +159,6 @@ export default function AdminDashboardMainPage() {
           }
         })
 
-        // FILTRAMOS LOS ÚLTIMOS COBROS PARA QUE SOLO SEAN INGRESOS REALES (no adelantos de sueldo)
         const ingresosRecientes = pagosMesActual.filter(p => !categoriasEgreso.includes(p.concepto_categoria))
 
         setMetricas({

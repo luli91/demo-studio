@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase"
-import { Search } from "lucide-react"
 
 import VisorReciboPDF from "@/components/admin/VisorReciboPDF"
 import CobroModal from "@/components/admin/CobroModal"
@@ -27,6 +26,9 @@ export default function AdminAlumnosPage() {
   const [filtroEtiqueta, setFiltroEtiqueta] = useState("")
   const [alumnos, setAlumnos] = useState<any[]>([])
 
+  const [modeloNegocio, setModeloNegocio] = useState<string>("mensual") 
+  const textos = DICCIONARIO[modeloNegocio as keyof typeof DICCIONARIO] || DICCIONARIO.mensual
+
   const [academiaOficial, setAcademiaOficial] = useState<any>({
     nombre_largo: "MI ACADEMIA",
     nombre_corto: "MI ACADEMIA",
@@ -38,9 +40,6 @@ export default function AdminAlumnosPage() {
   const [modalCobro, setModalCobro] = useState<{abierto: boolean, familia: any[]}>({abierto: false, familia: []})
   const [reciboVisualizado, setReciboVisualizado] = useState<any | null>(null)
   const [modalPreRegistro, setModalPreRegistro] = useState(false)
-
-  const modeloNegocio = "mensual" 
-  const textos = DICCIONARIO[modeloNegocio as keyof typeof DICCIONARIO]
 
   const handleArchivarAlumno = async (id: string) => {
     try {
@@ -70,6 +69,7 @@ export default function AdminAlumnosPage() {
     try {
       const { data: aca } = await supabase.from("academias").select("*").limit(1).single()
       if (aca) {
+        if (aca.modelo_negocio) setModeloNegocio(aca.modelo_negocio) // ACTUALIZACIÓN DINÁMICA
         setAcademiaOficial({
           nombre_largo: aca.nombre || "MI ACADEMIA",
           nombre_corto: aca.nombre_corto || aca.nombre || "MI ACADEMIA",
@@ -108,10 +108,9 @@ export default function AdminAlumnosPage() {
           }
         }
         
-        // REGLA HÍBRIDA (Nuevos pagos individuales + Viejos pagos grupales)
         const pagosPropios = (dataPagos || []).filter((p: any) => {
-          if (p.alumno_id === u.id) return true // Nueva lógica: su propio ID
-          return p.beneficiario && p.beneficiario.includes(u.nombre) // Lógica vieja (para no perder su historial)
+          if (p.alumno_id === u.id) return true 
+          return p.beneficiario && p.beneficiario.includes(u.nombre) 
         })
         
         const tienePagoEsteMes = pagosPropios.some((p: any) => {
@@ -131,7 +130,7 @@ export default function AdminAlumnosPage() {
         } else if (tienePagoEsteMes) {
           estadoCalculado = 'al_dia'
         } else if (!tienePagoMesAnterior) {
-          estadoCalculado = 'deuda' // Debe el mes pasado, el periodo de gracia no lo salva
+          estadoCalculado = 'deuda' 
         } else {
           estadoCalculado = diaActual <= diaVencimiento ? 'al_dia' : 'deuda'
         }
@@ -148,7 +147,7 @@ export default function AdminAlumnosPage() {
           creditos: flex.creditos_clases || 0,
           contacto_urgencia: flex.contacto_urgencia || "",
           documentos: flex.documentos || [],
-          pagos: pagosPropios, // Ahora la ficha solo muestra SUS pagos
+          pagos: pagosPropios, 
           asistencias: flex.asistencias || [],
           entrena: u.activa !== false,
           datos_flexibles: flex,
@@ -184,10 +183,6 @@ export default function AdminAlumnosPage() {
 
   if (!isMounted) return null
 
-  const simularSubidaArchivo = () => { cargarAlumnos() }
-  const handleCambiarFotoAdmin = () => { cargarAlumnos() }
-
-  // NUEVO SISTEMA DE COBROS: 1 PAGO POR CADA ALUMNO SELECCIONADO
   const handleCobrar = async (datos: any) => {
     if (datos.alumnosAPagar.length === 0) return toast.error("Seleccioná al menos un alumno.")
     
