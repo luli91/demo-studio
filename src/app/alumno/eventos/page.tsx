@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase"
 import { toast } from "sonner"
-import { Loader2, Sparkles, Ticket, Users, MapPin, CheckCircle2 } from "lucide-react"
+import { Loader2, Sparkles, Ticket, Users, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -14,28 +14,39 @@ export default function EventosPage() {
   const [eventos, setEventos] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   
-  const [comprandoMP, setComprandoMP] = useState<string | null>(null)
-  const [procesandoCredito, setProcesandoCredito] = useState<string | null>(null)
+  // WhatsApp oficial cargado desde la configuración de la academia
+  const [whatsappAdmin, setWhatsappAdmin] = useState<string>("5491100000000")
 
   useEffect(() => {
     const cargarEventosYUsuario = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       
       if (user) {
-        // Cambiado a tu tabla real 'usuarios' y leyendo los créditos flexibles
         const { data: dataPerfil } = await supabase.from("usuarios").select("*").eq("id", user.id).single()
         if (dataPerfil) {
           setPerfil({
             id: dataPerfil.id,
             nombre: dataPerfil.nombre,
-            creditos_clases: dataPerfil.datos_flexibles?.creditos_clases || 0
+            creditos_clases: dataPerfil.datos_flexibles?.creditos_clases || 0,
+            academia_id: dataPerfil.academia_id
           })
+
+          if (dataPerfil.academia_id) {
+            const { data: aca } = await supabase
+              .from('academias')
+              .select('telefono')
+              .eq('id', dataPerfil.academia_id)
+              .single()
+            
+            if (aca?.telefono) {
+              setWhatsappAdmin(aca.telefono.replace(/\D/g, ''))
+            }
+          }
         }
       }
 
       const hoy = new Date().toISOString().split('T')[0]
       
-      // Apuntamos a la tabla operativa real de la aplicación
       const { data: dataEventos } = await supabase
         .from("clases_programadas")
         .select(`*, reservas (id, alumno_id, estado)`)
@@ -54,28 +65,18 @@ export default function EventosPage() {
     cargarEventosYUsuario()
   }, [supabase])
 
-  const handlePagarEventoMP = async (evento: any) => {
+  const handleAnotarseEventoWhatsApp = (evento: any) => {
     if (!perfil) return toast.error("No se pudo identificar tu sesión.")
-    setComprandoMP(evento.id)
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: "evento", evento: evento, perfilId: perfil.id }),
-      })
-      const data = await res.json()
-      if (data.init_point) window.location.href = data.init_point
-      else toast.error("Error al conectar con Mercado Pago.")
-    } catch (error) { 
-      toast.error("Ocurrió un error de conexión.") 
-    } finally { 
-      setComprandoMP(null) 
-    }
+    
+    const textoMensaje = `¡Hola! Me interesa anotarme al evento especial: "${evento.titulo}" programado para el día ${formatearFecha(evento.fecha)} a las ${evento.hora_inicio.slice(0, 5)}hs. ¿Cómo puedo hacer para abonar la entrada de $${evento.precio.toLocaleString('es-AR')}? Mi nombre es ${perfil.nombre}.`
+    
+    const linkWpp = `https://wa.me/${whatsappAdmin}?text=${encodeURIComponent(textoMensaje)}`
+    window.open(linkWpp, '_blank')
+    toast.success("Abriendo WhatsApp de administración para coordinar tu pago...")
   }
 
   const handleAnotarseEventoConCredito = async (evento: any) => {
     if (!perfil) return toast.error("No se pudo identificar tu sesión.")
-    setProcesandoCredito(evento.id)
     
     try {
       const costo = evento.costo_creditos || 1
@@ -83,7 +84,6 @@ export default function EventosPage() {
         throw new Error(`Necesitás ${costo} créditos y tenés ${perfil.creditos_clases}.`)
       }
       
-      // Insertamos la reserva real vinculada al alumno
       const { error: errReserva } = await supabase.from('reservas').insert({
         alumno_id: perfil.id,
         clase_id: evento.id,
@@ -92,8 +92,6 @@ export default function EventosPage() {
       if (errReserva) throw errReserva
 
       const nuevosCreditos = perfil.creditos_clases - costo
-      
-      // Resguardamos los datos flexibles del JSON para no pisar campos existentes
       const { data: usrActual } = await supabase.from('usuarios').select('datos_flexibles').eq('id', perfil.id).single()
       const nuevoPayload = { ...(usrActual?.datos_flexibles || {}), creditos_clases: nuevosCreditos }
 
@@ -110,9 +108,7 @@ export default function EventosPage() {
       ))
     } catch (error: any) {
       toast.error(error.message)
-    } finally {
-      setProcesandoCredito(null)
-    }
+    } 
   }
 
   const formatearFecha = (fechaStr: string) => {
@@ -135,7 +131,7 @@ export default function EventosPage() {
             <h1 className="text-2xl font-bold tracking-tight">Próximos Eventos</h1>
           </div>
           <p className="text-muted-foreground text-sm max-w-xl">
-            Inscribite a nuestras masterclasses, workshops y eventos especiales. Podés usar tus créditos disponibles o abonar directamente con Mercado Pago.
+            Inscribite a nuestras masterclasses, workshops y galas de fin de año. Podés asegurar tu lugar mediante créditos o solicitando tu entrada a administración.
           </p>
         </div>
       </div>
@@ -149,20 +145,30 @@ export default function EventosPage() {
             const yaAnotada = ev.reservas_confirmadas?.some((r: any) => r.alumno_id === perfil?.id)
             
             const precioReal = ev.precio || 0
-            const esEventoPagoMP = ev.costo_creditos === 0 && precioReal > 0
+            const esEventoPagoMonetario = ev.costo_creditos === 0 && precioReal > 0
 
             return (
               <Card key={ev.id} className={`flex flex-col rounded-2xl overflow-hidden transition-all bg-card ${yaAnotada ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border hover:border-primary/50'}`}>
+                
+                {/* CABECERA CON IMAGEN */}
                 <div className="h-48 relative bg-secondary/30 flex items-center justify-center overflow-hidden">
-                  <Ticket className="h-16 w-16 text-primary/20" />
                   
-                  <div className="absolute top-4 left-4 bg-background/95 backdrop-blur-sm text-foreground px-3 py-2 rounded-xl text-xs font-black uppercase shadow-lg border border-border/50 text-center leading-tight">
+                  {ev.imagen_url ? (
+                    <>
+                      <img src={ev.imagen_url} alt={ev.titulo} className="absolute inset-0 w-full h-full object-cover z-0" />
+                      <div className="absolute inset-0 bg-black/20 z-0" /> {/* Sombreado sutil */}
+                    </>
+                  ) : (
+                    <Ticket className="h-16 w-16 text-primary/20 relative z-0" />
+                  )}
+                  
+                  <div className="absolute top-4 left-4 bg-background/95 backdrop-blur-sm text-foreground px-3 py-2 rounded-xl text-xs font-black uppercase shadow-lg border border-border/50 text-center leading-tight z-10">
                     {formatearFecha(ev.fecha)} <br/>
                     <span className="text-primary">{ev.hora_inicio.slice(0,5)}hs</span>
                   </div>
 
                   {yaAnotada && (
-                    <div className="absolute top-4 right-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg">
+                    <div className="absolute top-4 right-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg z-10">
                       Anotada
                     </div>
                   )}
@@ -188,25 +194,24 @@ export default function EventosPage() {
                     <div className="text-left">
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-0.5">Valor</p>
                       <span className="text-2xl font-black text-foreground">
-                        {esEventoPagoMP ? `$${precioReal.toLocaleString('es-AR')}` : `${ev.costo_creditos} Crédito${ev.costo_creditos !== 1 ? 's' : ''}`}
+                        {esEventoPagoMonetario ? `$${precioReal.toLocaleString('es-AR')}` : `${ev.costo_creditos} Crédito${ev.costo_creditos !== 1 ? 's' : ''}`}
                       </span>
                     </div>
                     
                     <Button 
-                      onClick={() => esEventoPagoMP ? handlePagarEventoMP(ev) : handleAnotarseEventoConCredito(ev)}
-                      disabled={comprandoMP === ev.id || procesandoCredito === ev.id || estaLlena || yaAnotada}
+                      onClick={() => esEventoPagoMonetario ? handleAnotarseEventoWhatsApp(ev) : handleAnotarseEventoConCredito(ev)}
+                      disabled={estaLlena || yaAnotada}
                       className={`font-bold uppercase tracking-widest text-xs h-12 px-6 transition-all shadow-sm ${
-                        esEventoPagoMP && !yaAnotada && !estaLlena 
-                          ? 'bg-[#009EE3] hover:bg-[#008CC9] text-white' 
+                        esEventoPagoMonetario && !yaAnotada && !estaLlena 
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
                           : yaAnotada ? 'bg-secondary text-foreground opacity-100 cursor-default'
                           : estaLlena ? 'bg-muted text-muted-foreground'
                           : 'bg-primary text-primary-foreground hover:bg-primary/90'
                       }`}
                     >
-                      {comprandoMP === ev.id || procesandoCredito === ev.id ? <Loader2 className="h-5 w-5 animate-spin" /> : 
-                       yaAnotada ? "Ya estás anotada" : 
+                      {yaAnotada ? "Ya estás anotada" : 
                        estaLlena ? "Agotado" : 
-                       esEventoPagoMP ? "Pagar con MP" : "Anotarme"}
+                       esEventoPagoMonetario ? "Anotarme" : "Anotarme"}
                     </Button>
                   </div>
                 </CardContent>

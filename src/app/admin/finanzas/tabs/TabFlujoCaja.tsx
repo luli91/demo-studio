@@ -1,78 +1,79 @@
 "use client"
 
-import { TrendingUp, Clock, TrendingDown, Wallet, Printer, Plus, Minus, ReceiptText } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { FileText, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, LayoutList } from "lucide-react"
 
-export default function TabFlujoCaja({ movimientos, ingresos, egresos, neto, dineroEnCalle }: { movimientos: any[], ingresos: number, egresos: number, neto: number, dineroEnCalle: number }) {
-  const dataGrafico = [
-    { name: 'Percibido (Caja Real)', Ingresos: ingresos, Gastos: egresos },
-    { name: 'Proyectado (Total Esperado)', Ingresos: ingresos + dineroEnCalle, Gastos: egresos },
-  ];
-
+export default function TabFlujoCaja({ movimientos, ingresos, egresos, neto, dineroEnCalle }: any) {
+  
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
-        <Card className="border-border shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-2 mb-2 text-emerald-600"><TrendingUp className="h-4 w-4" /><p className="font-black uppercase tracking-widest text-[10px]">Ingresado (Banco)</p></div><p className="text-2xl font-black">${ingresos.toLocaleString('es-AR')}</p></CardContent></Card>
-        <Card className="border-amber-200 shadow-sm bg-amber-50/30"><CardContent className="p-5"><div className="flex items-center gap-2 mb-2 text-amber-600"><Clock className="h-4 w-4" /><p className="font-black uppercase tracking-widest text-[10px]">Por Cobrar (Morosos)</p></div><p className="text-2xl font-black text-amber-700">${dineroEnCalle.toLocaleString('es-AR')}</p></CardContent></Card>
-        <Card className="border-border shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-2 mb-2 text-destructive"><TrendingDown className="h-4 w-4" /><p className="font-black uppercase tracking-widest text-[10px]">Total Gastos</p></div><p className="text-2xl font-black">${egresos.toLocaleString('es-AR')}</p></CardContent></Card>
-        <Card className={`border-none shadow-md text-white ${neto >= 0 ? 'bg-primary' : 'bg-destructive'}`}><CardContent className="p-5 relative overflow-hidden"><div className="absolute right-0 top-0 opacity-10"><Wallet className="h-24 w-24 -mt-2 -mr-2" /></div><p className="font-black uppercase tracking-widest text-[10px] opacity-80 mb-2">Neto Actual</p><p className="text-3xl font-black">${neto.toLocaleString('es-AR')}</p></CardContent></Card>
+      
+      {/* CUADROS DE RESUMEN FINANCIERO */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Ingresado (Caja)</h3>
+            <div className="bg-emerald-100 p-1.5 rounded-md text-emerald-600"><TrendingUp className="h-4 w-4" /></div>
+          </div>
+          <p className="text-2xl font-black mt-3 text-slate-900">${ingresos.toLocaleString('es-AR')}</p>
+        </div>
+
+        <div className="bg-white border rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Total Gastos</h3>
+            <div className="bg-red-100 p-1.5 rounded-md text-red-600"><TrendingDown className="h-4 w-4" /></div>
+          </div>
+          <p className="text-2xl font-black mt-3 text-slate-900">${egresos.toLocaleString('es-AR')}</p>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Neto Actual del Mes</h3>
+            <div className="bg-slate-800 p-1.5 rounded-md text-white"><LayoutList className="h-4 w-4" /></div>
+          </div>
+          <div className="flex items-end justify-between mt-3">
+            <p className={`text-4xl font-black ${neto >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              ${neto.toLocaleString('es-AR')}
+            </p>
+            <p className="text-xs font-bold text-slate-400 uppercase">Dinero en Deudores: ${dineroEnCalle.toLocaleString('es-AR')}</p>
+          </div>
+        </div>
       </div>
 
-      <Card className="border-border shadow-sm overflow-hidden print:hidden">
-        <CardHeader className="p-5 border-b border-border bg-secondary/10">
-          <CardTitle className="text-sm font-black uppercase tracking-widest text-foreground">Realidad vs Proyección Mensual</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6 h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dataGrafico} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 800, fill: '#64748b' }} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 800, fill: '#64748b' }} tickFormatter={(value) => `$${value >= 1000 ? (value/1000) + 'k' : value}`} />
-              <Tooltip cursor={{fill: '#f1f5f9'}} formatter={(value: any) => [`$${Number(value).toLocaleString('es-AR')}`, 'Monto']} />
-              <Bar dataKey="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} name="Ingresos" />
-              <Bar dataKey="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} name="Gastos" />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden print:border-none print:shadow-none print:w-full">
-        <div className="p-5 border-b border-border flex justify-between items-center bg-secondary/10 print:bg-transparent print:border-black print:pb-4">
-          <h3 className="font-black text-sm uppercase tracking-widest print:text-black">Libro Diario</h3>
-          <Button onClick={() => window.print()} variant="default" size="sm" className="gap-2 print:hidden"><Printer className="h-4 w-4" /> Imprimir</Button>
+      {/* LIBRO DIARIO (Sin Clic para PDF) */}
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <div className="p-5 border-b bg-slate-50 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-slate-500" />
+          <h3 className="font-black text-sm uppercase tracking-widest text-slate-700">Libro Diario</h3>
         </div>
-        <div className="divide-y divide-border print:divide-black/20 max-h-[500px] overflow-y-auto">
+        <div className="divide-y divide-slate-100">
           {movimientos.length === 0 ? (
-            <p className="p-8 text-center text-muted-foreground italic text-sm font-medium">No hay movimientos en la caja este mes.</p>
+            <p className="p-12 text-center text-slate-500 text-sm italic">No hay movimientos registrados este mes.</p>
           ) : (
-            movimientos.map((mov) => (
-              <div key={mov.id} className="p-4 flex items-center justify-between hover:bg-secondary/5">
+            movimientos.map((mov: any) => (
+              <div 
+                key={mov.id} 
+                className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+              >
                 <div className="flex items-center gap-4">
-                  <div className={`p-2 rounded-xl print:hidden ${mov.tipo === 'ingreso' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive'}`}>
-                    {mov.tipo === 'ingreso' ? <Plus className="h-5 w-5" /> : <Minus className="h-5 w-5" />}
+                  <div className={`p-2 rounded-xl ${mov.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                    {mov.tipo === 'ingreso' ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-foreground print:text-black">{mov.descripcion}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 print:text-black/60">{new Date(mov.fecha).toLocaleDateString('es-AR')} • {mov.metodo}</p>
+                    <p className="font-bold text-slate-900 uppercase text-sm">{mov.descripcion}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {new Date(mov.fecha).toLocaleDateString('es-AR', {day: 'numeric', month: 'short'})} • {mov.metodo}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <p className={`font-black text-base print:text-black ${mov.tipo === 'ingreso' ? 'text-emerald-600' : 'text-foreground'}`}>
-                    {mov.tipo === 'ingreso' ? '+' : '-'}${Number(mov.monto).toLocaleString('es-AR')}
-                  </p>
-                  {mov.comprobante_url && (
-                    <a href={mov.comprobante_url} target="_blank" rel="noopener noreferrer">
-                      <Button size="icon" variant="outline" className="h-8 w-8 text-muted-foreground hover:text-primary"><ReceiptText className="h-4 w-4"/></Button>
-                    </a>
-                  )}
-                </div>
+                <span className={`font-black text-lg ${mov.tipo === 'ingreso' ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {mov.tipo === 'ingreso' ? '+' : '-'}${Number(mov.monto).toLocaleString('es-AR')}
+                </span>
               </div>
             ))
           )}
         </div>
       </div>
+
     </div>
   )
 }

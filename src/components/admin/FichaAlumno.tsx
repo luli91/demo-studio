@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { 
   ArrowLeft, Wallet, CheckCircle2, AlertCircle, 
-  ReceiptText, Banknote, FileText, Download, UploadCloud, Loader2, Trash2, CalendarDays, PauseCircle
+  ReceiptText, Banknote, FileText, Download, UploadCloud, Loader2, Trash2, CalendarDays, PauseCircle, Users
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,7 @@ export default function FichaAlumno({
   alumno, modeloNegocio, onVolver, onAbrirCobro, onVerRecibo, onSubirArchivo, onCambiarFoto, onArchivar, onEliminarPre 
 }: FichaAlumnoProps) {
   const supabase = createClient()
-  const [pestaña, setPestaña] = useState<'perfil' | 'legajo' | 'finanzas' | 'asistencias' | 'familia'>('perfil')
+  const [pestaña, setPestaña] = useState<'perfil' | 'legajo' | 'finanzas' | 'familia'>('perfil')
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   
   const [subiendoDoc, setSubiendoDoc] = useState(false)
@@ -42,13 +42,24 @@ export default function FichaAlumno({
   const [nuevoVencimiento, setNuevoVencimiento] = useState<number>(flex.dia_vencimiento ? Number(flex.dia_vencimiento) : 10)
   const [guardandoVencimiento, setGuardandoVencimiento] = useState(false)
 
-  // NUEVO: Estado para manejar la pausa de la cuenta
   const [esPausado, setEsPausado] = useState<boolean>(Boolean(flex.pausado))
   const [guardandoPausa, setGuardandoPausa] = useState(false)
+
+  const [tutorResponsable, setTutorResponsable] = useState<any>(null)
 
   const esMenor = Boolean(alumno.titular_id)
   const esTutor = alumno.entrena === false
   const direccionArmada = [flex.calle, flex.numero_calle, flex.barrio_localidad, flex.provincia].filter(Boolean).join(", ")
+
+  useEffect(() => {
+    if (esMenor && alumno.titular_id) {
+      const buscarTutor = async () => {
+        const { data } = await supabase.from('usuarios').select('nombre, telefono').eq('id', alumno.titular_id).single()
+        if (data) setTutorResponsable(data)
+      }
+      buscarTutor()
+    }
+  }, [esMenor, alumno.titular_id, supabase])
 
   const handleSubirFotoAdmin = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
@@ -151,7 +162,6 @@ export default function FichaAlumno({
     }
   }
 
-  // NUEVA FUNCIÓN: Pausar / Reactivar Alumno
   const handleTogglePausa = async () => {
     try {
       setGuardandoPausa(true)
@@ -162,7 +172,7 @@ export default function FichaAlumno({
       
       setEsPausado(nuevoEstado)
       toast.success(nuevoEstado ? "Cuenta pausada correctamente. No sumará deuda." : "Cuenta reactivada. Sus vencimientos vuelven a correr.")
-      onSubirArchivo() // Usamos este callback para forzar el refresh del padre
+      onSubirArchivo() 
     } catch (error: any) {
       toast.error("Error al pausar la cuenta.")
     } finally {
@@ -183,9 +193,6 @@ export default function FichaAlumno({
         {!esMenor && (
           <button onClick={() => setPestaña('familia')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestaña === 'familia' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>Familiar</button>
         )}
-        {!esTutor && (
-          <button onClick={() => setPestaña('asistencias')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors ${pestaña === 'asistencias' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>Asistencias</button>
-        )}
       </div>
 
       <div className="pt-4">
@@ -205,21 +212,20 @@ export default function FichaAlumno({
 
         {pestaña === 'legajo' && (
           <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in">
-            {/* CÓDIGO LEGAJO... */}
-            <Card className="border-border shadow-sm bg-card rounded-[2.5rem] overflow-hidden">
-              <div className="p-5 border-b border-border bg-secondary/10 flex items-center justify-between">
+            <Card className="border-border shadow-sm bg-card rounded-3xl overflow-hidden">
+              <div className="p-4 border-b border-border bg-secondary/10 flex items-center justify-between">
                 <div className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /><h3 className="font-black text-sm uppercase tracking-widest text-foreground">Legajo Médico y Legal</h3></div>
                 <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-black">{alumno.documentos?.length || 0}</span>
               </div>
               <CardContent className="p-5 space-y-4">
                 <div className="divide-y divide-border">
                   {(!alumno.documentos || alumno.documentos.length === 0) ? (
-                    <p className="py-12 text-center text-muted-foreground text-xs italic">No hay archivos adjuntos en el legajo.</p>
+                    <p className="py-8 text-center text-muted-foreground text-xs italic">No hay archivos adjuntos en el legajo.</p>
                   ) : (
                     alumno.documentos.map((doc: any) => (
-                      <div key={doc.id} className="py-4 flex items-center justify-between group">
-                        <div className="flex items-center gap-4 min-w-0">
-                          <div className="p-3 bg-secondary rounded-xl shrink-0"><FileText className="h-5 w-5 text-muted-foreground" /></div>
+                      <div key={doc.id} className="py-3 flex items-center justify-between group">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-2 bg-secondary rounded-xl shrink-0"><FileText className="h-4 w-4 text-muted-foreground" /></div>
                           <div className="min-w-0">
                             <p className="text-sm font-bold text-foreground truncate">{doc.nombre}</p>
                             <p className="text-[10px] text-muted-foreground uppercase mt-0.5">{format(new Date(doc.fecha), "dd MMM yyyy", {locale:es})}</p>
@@ -227,10 +233,10 @@ export default function FichaAlumno({
                         </div>
                         <div className="flex items-center shrink-0">
                           <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground hover:text-primary rounded-full"><Download className="h-5 w-5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary rounded-full"><Download className="h-4 w-4" /></Button>
                           </a>
-                          <Button variant="ghost" size="icon" onClick={() => handleBorrarLegajo(doc.id, doc.url)} disabled={borrandoDoc === doc.id} className="h-10 w-10 text-muted-foreground hover:text-destructive rounded-full">
-                            {borrandoDoc === doc.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          <Button variant="ghost" size="icon" onClick={() => handleBorrarLegajo(doc.id, doc.url)} disabled={borrandoDoc === doc.id} className="h-8 w-8 text-muted-foreground hover:text-destructive rounded-full">
+                            {borrandoDoc === doc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </Button>
                         </div>
                       </div>
@@ -242,12 +248,12 @@ export default function FichaAlumno({
                   <input type="file" id={`upload-admin-${alumno.id}`} className="hidden" accept=".pdf,image/*" onChange={handleSubirLegajo} />
                   <div 
                     onClick={() => document.getElementById(`upload-admin-${alumno.id}`)?.click()}
-                    className={`flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-xl cursor-pointer bg-secondary/5 hover:bg-secondary/10 transition-all text-center px-4 ${subiendoDoc ? 'opacity-50 pointer-events-none' : 'hover:border-primary/40'}`}
+                    className={`flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-border rounded-xl cursor-pointer bg-secondary/5 hover:bg-secondary/10 transition-all text-center px-4 ${subiendoDoc ? 'opacity-50 pointer-events-none' : 'hover:border-primary/40'}`}
                   >
-                    {subiendoDoc ? <Loader2 className="h-6 w-6 text-primary animate-spin" /> : (
+                    {subiendoDoc ? <Loader2 className="h-5 w-5 text-primary animate-spin" /> : (
                       <>
-                        <UploadCloud className="h-6 w-6 text-muted-foreground mb-2" />
-                        <p className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">Hacé clic para adjuntar un PDF o Imagen</p>
+                        <UploadCloud className="h-5 w-5 text-muted-foreground mb-1" />
+                        <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Clic para adjuntar PDF o Imagen</p>
                       </>
                     )}
                   </div>
@@ -257,52 +263,48 @@ export default function FichaAlumno({
           </div>
         )}
 
-        {/* PESTAÑA 3: ESTADO DE CUENTA */}
         {pestaña === 'finanzas' && (
-          <div className="max-w-4xl mx-auto space-y-6 w-full animate-in fade-in">
+          <div className="max-w-3xl mx-auto space-y-6 w-full animate-in fade-in">
             
-            {/* TARJETA FINANCIERA (AHORA REACCIONA A PAUSADO) */}
-            <Card className={`border-2 shadow-md bg-card rounded-[2.5rem] overflow-hidden transition-colors ${esPausado ? 'border-amber-200' : (alumno.estado_cuota === 'al_dia' ? 'border-border' : 'border-destructive/40')}`}>
-              <div className={`p-6 border-b flex items-center gap-3 transition-colors ${esPausado ? 'bg-amber-50/50 border-amber-100 text-amber-700' : (alumno.estado_cuota === 'al_dia' ? 'bg-secondary/10 border-border text-foreground' : 'bg-destructive/10 border-destructive/20 text-destructive')}`}>
-                <Wallet className="h-6 w-6" />
-                <h3 className="text-xl font-black uppercase tracking-tighter italic">Situación Financiera</h3>
+            <Card className={`border shadow-sm bg-card rounded-2xl overflow-hidden transition-colors ${esPausado ? 'border-amber-200' : (alumno.estado_cuota === 'al_dia' ? 'border-border' : 'border-destructive/40')}`}>
+              <div className={`p-4 border-b flex items-center gap-2 transition-colors ${esPausado ? 'bg-amber-50/50 border-amber-100 text-amber-700' : (alumno.estado_cuota === 'al_dia' ? 'bg-secondary/10 border-border text-foreground' : 'bg-destructive/10 border-destructive/20 text-destructive')}`}>
+                <Wallet className="h-5 w-5" />
+                <h3 className="text-lg font-black uppercase tracking-tight">Situación Financiera</h3>
               </div>
-              <CardContent className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <CardContent className="p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 
-                <div className="flex flex-col gap-5 w-full md:w-auto">
+                <div className="flex flex-col gap-4 w-full md:w-auto">
                   {modeloNegocio === 'reservas' ? (
-                    <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Créditos ({alumno.nombre})</p><p className="text-7xl font-black text-primary">{alumno.creditos_clases || 0}</p></div>
+                    <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Créditos ({alumno.nombre})</p><p className="text-5xl font-black text-primary">{alumno.creditos_clases || 0}</p></div>
                   ) : (
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Membresía</p>
-                      
-                      {/* ESTADOS: PAUSADO, AL DÍA o VENCIDA */}
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Membresía</p>
                       {esPausado ? (
-                        <div className="flex items-center gap-3"><PauseCircle className="h-12 w-12 text-amber-500" /><p className="text-3xl font-black text-amber-600 uppercase tracking-tight">Pausada</p></div>
+                        <div className="flex items-center gap-2"><PauseCircle className="h-8 w-8 text-amber-500" /><p className="text-2xl font-black text-amber-600 uppercase tracking-tight">Pausada</p></div>
                       ) : alumno.estado_cuota === 'al_dia' ? (
-                        <div className="flex items-center gap-3"><CheckCircle2 className="h-12 w-12 text-emerald-500" /><p className="text-3xl font-black text-foreground uppercase tracking-tight">Al Día</p></div>
+                        <div className="flex items-center gap-2"><CheckCircle2 className="h-8 w-8 text-emerald-500" /><p className="text-2xl font-black text-foreground uppercase tracking-tight">Al Día</p></div>
                       ) : (
-                        <div className="flex items-center gap-3"><AlertCircle className="h-12 w-12 text-destructive animate-pulse" /><p className="text-3xl font-black text-destructive uppercase tracking-tight">Vencida</p></div>
+                        <div className="flex items-center gap-2"><AlertCircle className="h-8 w-8 text-destructive animate-pulse" /><p className="text-2xl font-black text-destructive uppercase tracking-tight">Vencida</p></div>
                       )}
                     </div>
                   )}
 
                   {modeloNegocio === 'mensual' && (
-                    <div className="p-4 bg-secondary/30 rounded-2xl border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
-                      <div className="flex items-start gap-3">
-                        <CalendarDays className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <div className="p-3 bg-secondary/30 rounded-xl border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-1">
+                      <div className="flex items-start gap-2">
+                        <CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5" />
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vencimiento Personalizado</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vencimiento Personalizado</p>
                           {!editandoVencimiento ? (
-                            <p className="text-sm font-black text-foreground mt-0.5">Día {flex.dia_vencimiento || 10} de cada mes</p>
+                            <p className="text-xs font-black text-foreground mt-0.5">Día {flex.dia_vencimiento || 10} de cada mes</p>
                           ) : (
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs font-bold text-muted-foreground">Día</span>
+                              <span className="text-[10px] font-bold text-muted-foreground">Día</span>
                               <input 
                                 type="number" min="1" max="31" 
                                 value={nuevoVencimiento} 
                                 onChange={(e) => setNuevoVencimiento(Number(e.target.value))}
-                                className="w-16 h-8 text-center font-bold bg-background border border-border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
+                                className="w-14 h-7 text-xs text-center font-bold bg-background border border-border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
                               />
                             </div>
                           )}
@@ -311,11 +313,11 @@ export default function FichaAlumno({
                       
                       <div>
                         {!editandoVencimiento ? (
-                          <Button variant="outline" size="sm" onClick={() => setEditandoVencimiento(true)} className="h-8 text-xs font-bold border-border shadow-sm">Editar</Button>
+                          <Button variant="outline" size="sm" onClick={() => setEditandoVencimiento(true)} className="h-7 px-3 text-[10px] font-bold border-border shadow-sm">Editar</Button>
                         ) : (
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => { setEditandoVencimiento(false); setNuevoVencimiento(flex.dia_vencimiento || 10); }} disabled={guardandoVencimiento} className="h-8 text-xs">Cancelar</Button>
-                            <Button size="sm" onClick={handleGuardarVencimiento} disabled={guardandoVencimiento} className="h-8 text-xs font-bold bg-primary text-white shadow-sm">
+                            <Button variant="ghost" size="sm" onClick={() => { setEditandoVencimiento(false); setNuevoVencimiento(flex.dia_vencimiento || 10); }} disabled={guardandoVencimiento} className="h-7 px-2 text-[10px]">Cancelar</Button>
+                            <Button size="sm" onClick={handleGuardarVencimiento} disabled={guardandoVencimiento} className="h-7 px-3 text-[10px] font-bold bg-primary text-white shadow-sm">
                               {guardandoVencimiento ? <Loader2 className="h-3 w-3 animate-spin" /> : "Guardar"}
                             </Button>
                           </div>
@@ -324,14 +326,13 @@ export default function FichaAlumno({
                     </div>
                   )}
 
-                  {/* NUEVO MÓDULO: BOTÓN PAUSAR */}
                   {modeloNegocio === 'mensual' && (
-                    <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2 ${esPausado ? 'bg-amber-50 border-amber-200' : 'bg-secondary/10 border-border'}`}>
-                      <div className="flex items-start gap-3">
-                        <PauseCircle className={`h-5 w-5 mt-0.5 ${esPausado ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                    <div className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-1 ${esPausado ? 'bg-amber-50 border-amber-200' : 'bg-secondary/10 border-border'}`}>
+                      <div className="flex items-start gap-2">
+                        <PauseCircle className={`h-4 w-4 mt-0.5 ${esPausado ? 'text-amber-600' : 'text-muted-foreground'}`} />
                         <div>
-                          <p className={`text-[10px] font-black uppercase tracking-widest ${esPausado ? 'text-amber-700' : 'text-muted-foreground'}`}>Estado de la Cuenta</p>
-                          <p className={`text-sm font-bold mt-0.5 ${esPausado ? 'text-amber-900' : 'text-foreground'}`}>
+                          <p className={`text-[9px] font-black uppercase tracking-widest ${esPausado ? 'text-amber-700' : 'text-muted-foreground'}`}>Estado de la Cuenta</p>
+                          <p className={`text-xs font-bold mt-0.5 ${esPausado ? 'text-amber-900' : 'text-foreground'}`}>
                             {esPausado ? "Congelada (No genera deuda)" : "Activa (Genera vencimientos)"}
                           </p>
                         </div>
@@ -341,7 +342,7 @@ export default function FichaAlumno({
                         size="sm"
                         onClick={handleTogglePausa}
                         disabled={guardandoPausa}
-                        className={`h-8 text-xs font-bold shadow-sm ${esPausado ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'border-border text-foreground hover:bg-secondary'}`}
+                        className={`h-7 px-3 text-[10px] font-bold shadow-sm ${esPausado ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'border-border text-foreground hover:bg-secondary'}`}
                       >
                         {guardandoPausa ? <Loader2 className="h-3 w-3 animate-spin" /> : (esPausado ? "Reactivar Cuenta" : "Pausar Cuenta")}
                       </Button>
@@ -350,40 +351,49 @@ export default function FichaAlumno({
                 </div>
 
                 {!esMenor ? (
-                  <Button onClick={onAbrirCobro} className="bg-primary hover:bg-primary/90 font-black uppercase tracking-widest rounded-xl h-14 px-8 shadow-lg w-full md:w-auto shrink-0">
+                  <Button onClick={onAbrirCobro} className="bg-primary hover:bg-primary/90 font-black uppercase tracking-widest rounded-xl h-11 px-6 shadow-sm w-full md:w-auto shrink-0 text-xs">
                     Registrar Cobro
                   </Button>
                 ) : (
-                  <p className="text-[10px] font-black uppercase text-muted-foreground max-w-xs text-left md:text-right bg-secondary/20 p-4 rounded-xl border border-border">
-                    Los pagos de los menores se gestionan desde la ficha del adulto responsable.
-                  </p>
+                  <div className="flex flex-col items-start md:items-end w-full md:w-auto bg-amber-50 border border-amber-200 p-4 rounded-xl shrink-0 max-w-xs">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Users className="h-4 w-4 text-amber-600" />
+                      <p className="text-[9px] font-black uppercase tracking-widest text-amber-800">Pagos a cargo del Titular</p>
+                    </div>
+                    <p className="text-base font-black text-amber-900 uppercase mt-1">
+                      {tutorResponsable ? tutorResponsable.nombre : "Buscando titular..."}
+                    </p>
+                    <p className="text-[10px] font-bold text-amber-700/80 mt-1.5 text-left md:text-right leading-tight">
+                      Para registrar el cobro, hacelo desde la ficha de su responsable.
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
             
-            <Card className="border-border shadow-sm bg-card rounded-[2.5rem] overflow-hidden">
-              <div className="p-6 border-b border-border bg-emerald-500/5 flex items-center gap-2"><ReceiptText className="h-5 w-5 text-emerald-600"/><h3 className="font-black text-sm uppercase tracking-widest text-emerald-700">Historial de Pagos</h3></div>
+            <Card className="border-border shadow-sm bg-card rounded-2xl overflow-hidden">
+              <div className="p-4 border-b border-border bg-emerald-500/5 flex items-center gap-2"><ReceiptText className="h-4 w-4 text-emerald-600"/><h3 className="font-black text-sm uppercase tracking-widest text-emerald-700">Historial de Pagos</h3></div>
               <CardContent className="p-0">
                 <div className="divide-y divide-border">
                   {(!alumno.pagos || alumno.pagos.length === 0) ? (
-                    <p className="p-10 text-center text-muted-foreground italic text-sm">Aún no hay pagos registrados en la base de datos.</p>
+                    <p className="p-8 text-center text-muted-foreground italic text-xs">Aún no hay pagos registrados en la base de datos.</p>
                   ) : (
                     alumno.pagos.map((pago: any) => (
-                      <div key={pago.id} className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-secondary/5 transition-colors">
-                        <div className="flex items-start gap-4">
-                          <div className="bg-emerald-100 p-4 rounded-2xl text-emerald-600 shrink-0"><Banknote className="h-6 w-6" /></div>
+                      <div key={pago.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-secondary/5 transition-colors">
+                        <div className="flex items-start gap-3">
+                          <div className="bg-emerald-100 p-3 rounded-xl text-emerald-600 shrink-0"><Banknote className="h-5 w-5" /></div>
                           <div>
-                            <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">{format(new Date(pago.fecha), "dd MMM yyyy", {locale: es})}</p>
-                            <p className="text-base font-bold text-foreground mt-1 uppercase">{pago.concepto_categoria} - {pago.concepto_detalle}</p>
-                            {pago.beneficiario && <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase">Abonó para: {pago.beneficiario}</p>}
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{format(new Date(pago.fecha), "dd MMM yyyy", {locale: es})}</p>
+                            <p className="text-sm font-bold text-foreground mt-0.5 uppercase">{pago.concepto_categoria} - {pago.concepto_detalle}</p>
+                            {pago.beneficiario && <p className="text-[9px] font-bold text-muted-foreground mt-0.5 uppercase">Abonó para: {pago.beneficiario}</p>}
                           </div>
                         </div>
                         <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto mt-2 sm:mt-0 gap-2 shrink-0">
                           <div className="text-left sm:text-right">
-                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Importe</p>
-                            <p className="text-3xl font-black text-emerald-600">${pago.monto.toLocaleString('es-AR')}</p>
+                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Importe</p>
+                            <p className="text-xl font-black text-emerald-600">${pago.monto.toLocaleString('es-AR')}</p>
                           </div>
-                          <Button size="sm" variant="outline" onClick={() => onVerRecibo(pago)} className="h-8 rounded-lg text-[10px] font-bold uppercase tracking-wider border-emerald-500/30 text-emerald-600 hover:bg-emerald-50"><ReceiptText className="h-3 w-3 mr-1"/> Ver PDF</Button>
+                          <Button size="sm" variant="outline" onClick={() => onVerRecibo(pago)} className="h-7 px-3 rounded-md text-[9px] font-bold uppercase tracking-wider border-emerald-500/30 text-emerald-600 hover:bg-emerald-50"><ReceiptText className="h-3 w-3 mr-1"/> Ver PDF</Button>
                         </div>
                       </div>
                     ))
@@ -398,13 +408,6 @@ export default function FichaAlumno({
           <TabFamilia alumno={alumno} onSubirArchivo={onSubirArchivo} />
         )}
 
-        {!esTutor && pestaña === 'asistencias' && (
-          <div className="max-w-3xl mx-auto animate-in fade-in">
-            <Card className="border-border shadow-sm bg-card rounded-[2rem] overflow-hidden">
-              <CardContent className="p-16 text-center text-muted-foreground italic text-sm">Historial de asistencias próximamente...</CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -24,7 +24,6 @@ function FormularioLogin() {
   const supabase = createClient()
   const searchParams = useSearchParams()
 
-  // LEEMOS SI EL LINK VIENE CON CLUB: localhost:3000/login?club=club-barrio
   const slugClub = searchParams.get("club")
 
   const [cargandoAcademia, setCargandoAcademia] = useState(true)
@@ -36,7 +35,6 @@ function FormularioLogin() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState("")
 
-  // BUSCAMOS SI LA ACADEMIA EXISTE PARA PERSONALIZAR LA PANTALLA
   useEffect(() => {
     const buscarAcademia = async () => {
       if (!slugClub) {
@@ -46,7 +44,7 @@ function FormularioLogin() {
 
       const { data } = await supabase
         .from('academias')
-        .select('id, nombre, logo_url, slug')
+        .select('id, nombre, logo_url, slug, imagen_login, titulo_login, descripcion_login')
         .eq('slug', slugClub)
         .single()
 
@@ -81,7 +79,6 @@ function FormularioLogin() {
 
         toast.success("¡Bienvenida de nuevo!")
 
-        // Ruteo inteligente según el rol
         if (usuario.rol === "admin") {
           router.push("/admin")
         } else if (usuario.rol === "profesor" || usuario.rol === "profe") {
@@ -102,11 +99,9 @@ function FormularioLogin() {
 
   return (
     <div className="flex min-h-screen w-full bg-background">
-      {/* Columna Izquierda: Formulario */}
       <div className="flex w-full flex-col items-center justify-center p-8 lg:w-1/2">
         <div className="w-full max-w-md space-y-8">
           
-          {/* CABECERA DINÁMICA: Si hay club muestra el logo del club, sino el genérico */}
           <div className="text-center space-y-3">
             {academia ? (
               <>
@@ -162,12 +157,10 @@ function FormularioLogin() {
             </form>
           </div>
 
-          {/* PIE DE PÁGINA INTELIGENTE */}
           <p className="text-center text-sm text-muted-foreground mt-8">
             {academia ? (
               <>
                 ¿Sos alumno nuevo en esta academia?{" "}
-                {/* MAGIA: Te arma el link de registro perfecto con el slug heredado */}
                 <Link href={`/registro?club=${academia.slug}`} className="font-bold text-primary hover:underline">
                   Registrate acá
                 </Link>
@@ -178,13 +171,18 @@ function FormularioLogin() {
               </span>
             )}
           </p>
+          <div className="mt-12 border-t border-border pt-6 flex flex-col items-center justify-center space-y-1 select-none">
+            <p className="text-[9px] uppercase tracking-widest font-black text-muted-foreground/40">Powered by</p>
+            <p className="text-xs font-black tracking-tight text-foreground/60">
+              Lume Studio <span className="font-medium opacity-50">| by Cynthia Medina</span>
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Columna Derecha: Imagen Premium */}
       <div className="hidden lg:block lg:w-1/2 relative bg-primary">
         <img 
-          src="/login.png" 
+          src={academia?.imagen_login || "/login.png"} 
           alt="Fondo de entrenamiento" 
           className="absolute inset-0 h-full w-full object-cover opacity-50"
         />
@@ -192,12 +190,14 @@ function FormularioLogin() {
         <div className="absolute inset-0 flex items-center justify-center p-12 text-white z-20">
           <div className="max-w-md">
             <h2 className="text-4xl font-black mb-4 uppercase tracking-tight">
-              {academia ? `Potenciá tu nivel en ${academia.nombre}` : "Potenciá tu disciplina."}
+              {academia?.titulo_login || (academia ? `Potenciá tu nivel en ${academia.nombre}` : "Potenciá tu disciplina.")}
             </h2>
-            <p className="text-lg opacity-80 font-medium">Reservas, pagos y métricas en un solo lugar. La plataforma definitiva para clubes, estudios y academias profesionales.</p>
+            <p className="text-lg opacity-80 font-medium">
+              {academia?.descripcion_login || "Reservas, pagos y métricas en un solo lugar. La plataforma definitiva para clubes, estudios y academias profesionales."}
+            </p>
           </div>
         </div>
       </div>
     </div>
   )
-} 
+}

@@ -14,7 +14,7 @@ const TODAS_LAS_OPCIONES = [
   { titulo: "Inscripción", icono: CalendarDays, href: "/alumno/reservas", requiereReservas: true, requiereHijos: false }, 
   { titulo: "Billetera", icono: CreditCard, href: "/alumno/billetera", requiereReservas: false, requiereHijos: false },
   { titulo: "Tienda", icono: ShoppingBag, href: "/alumno/tienda", requiereReservas: true, requiereHijos: false }, 
-  { titulo: "Eventos", icono: Ticket, href: "/alumno/eventos", requiereReservas: false, requiereHijos: false },
+  { titulo: "Eventos", icono: Ticket, href: "/alumno/eventos", requiereReservas: true, requiereHijos: false },
   { titulo: "Mi Perfil", icono: User, href: "/alumno/perfil", requiereReservas: false, requiereHijos: false },
   { titulo: "Grupo Familiar", icono: Users, href: "/alumno/familia", requiereReservas: false, requiereHijos: true },
 ]

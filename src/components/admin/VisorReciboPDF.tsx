@@ -29,11 +29,10 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="max-w-lg w-full relative">
+    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm overflow-y-auto flex items-start sm:items-center justify-center p-4 py-10 animate-in fade-in">
+      <div className="max-w-lg w-full relative my-auto">
         
-        {/* Controles Flotantes para Exportar */}
-        <div className="flex justify-end gap-2 mb-2">
+        <div className="flex justify-end gap-2 mb-3 print:hidden">
           <Button variant="secondary" size="sm" onClick={() => {toast.success("Preparando PDF..."); setTimeout(()=>window.print(), 500)}} className="font-bold shadow-lg">
             <Printer className="h-4 w-4 mr-2" /> Imprimir
           </Button>
@@ -43,18 +42,14 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
           <Button variant="destructive" size="icon" onClick={onClose} className="shadow-lg"><X /></Button>
         </div>
 
-        {/* RECIBO A IMPRIMIR */}
         <div className="bg-[#fdfdfc] text-black p-8 sm:p-10 rounded-xl shadow-2xl relative overflow-hidden select-none" style={{fontFamily: "'Courier New', Courier, monospace"}}>
           
-          {/* Marca de Agua (Logo de Fondo) */}
           <div className="absolute inset-0 flex items-center justify-center opacity-[0.05] pointer-events-none">
             <img src={academia.logo_url || "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff"} alt="watermark" className="w-[80%] h-[80%] object-contain grayscale" />
           </div>
 
-          {/* ENCABEZADO */}
           <div className="flex justify-between items-start border-b-[3px] border-black/80 pb-6 mb-6">
             <div className="flex items-center gap-3">
-              {/* Logo Arriba a la Izquierda */}
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-[3px] border-black flex items-center justify-center p-1 bg-white relative z-10 shrink-0 overflow-hidden">
                 <img src={academia.logo_url || "https://api.dicebear.com/7.x/shapes/svg?seed=Lume&backgroundColor=ffffff"} className="w-full h-full object-cover" alt="Logo Academia" />
               </div>
@@ -69,10 +64,9 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
             </div>
           </div>
 
-          {/* CATEGORÍAS */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
             <div className="flex flex-wrap gap-2 text-xs font-bold uppercase">
-              {['CUOTA', 'FICHAJE', 'INSCRIPCION', 'OTROS'].map(cat => (
+              {['CUOTA', 'FICHAJE', 'INSCRIPCION', 'SPONSOR', 'OTROS'].map(cat => (
                 <div key={cat} className="border-2 border-black flex items-center bg-white relative z-10">
                   <div className="px-2 py-1 border-r-2 border-black">{cat}</div>
                   <div className="w-8 flex justify-center py-1 font-black text-lg">
@@ -89,7 +83,6 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
             </div>
           </div>
 
-          {/* DATOS */}
           <div className="space-y-8 text-lg sm:text-xl font-bold mt-10 relative z-10">
             <div className="flex items-end gap-2">
               <span className="w-24 sm:w-32 shrink-0">Socio:</span>
@@ -105,27 +98,25 @@ export default function VisorReciboPDF({ recibo, academia, onClose }: VisorRecib
             </div>
             <div className="flex items-end gap-2">
               <span className="w-24 sm:w-32 shrink-0">Concepto:</span>
-              <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-xl sm:text-2xl uppercase tracking-wider text-blue-900/80 truncate" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
+              {/* YA NO HAY REEMPLAZO, LEE EXACTAMENTE TU CONCEPTO */}
+              <span className="flex-1 border-b-[2px] border-dashed border-black pb-1 text-lg sm:text-xl uppercase tracking-wider text-blue-900/80 truncate" style={{fontFamily: "'Bradley Hand', cursive, sans-serif"}}>
                 {recibo.concepto_detalle || recibo.concepto}
               </span>
             </div>
           </div>
 
-          {/* FIRMA Y SELLO DE ADMINISTRACIÓN */}
           <div className="mt-20 flex justify-between items-end relative z-10">
             <div className="opacity-60">
-              <p className="text-[10px] font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academia.siglas || "APP"} SYSTEM</p>
+              <p className="text-[10px] font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academia.siglas || "APP"} Lume Studio</p>
             </div>
             <div className="text-center w-48 sm:w-64 relative">
-              
               <div className="absolute -top-16 left-0 w-full flex justify-center items-center h-16">
                 {academia.firma_url && academia.firma_url.trim() !== "" ? (
-                  <img src={academia.firma_url} alt="Firma" className="..." />
+                  <img src={academia.firma_url} alt="Firma" className="max-h-full object-contain mix-blend-multiply" />
                 ) : (
-                  <span className="...">{academia.admin_nombre}</span>
+                  <span className="font-[signature] italic text-2xl text-slate-800 opacity-80">{academia.admin_nombre}</span>
                 )}
               </div>
-
               <div className="border-b-[2px] border-black mb-1 h-2 mt-4"></div>
               <p className="text-xs sm:text-sm font-black uppercase tracking-widest" style={{fontFamily: "Arial, sans-serif"}}>{academia.admin_nombre || "Administración"}</p>
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5" style={{fontFamily: "Arial, sans-serif"}}>Administración / Tesorería</p>

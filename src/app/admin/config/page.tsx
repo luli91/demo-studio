@@ -2,28 +2,34 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase"
-import { Settings, CreditCard, AlertCircle, Building2, Megaphone, Loader2 } from "lucide-react"
+import { Settings, CreditCard, Building2, Megaphone, Loader2, Sparkles, Calendar, DollarSign, Users, MonitorSmartphone } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
-// Importamos los componentes visuales que creamos en la carpeta tabs
 import TabInstitucional from "./tabs/TabInstitucional"
 import TabCartelera from "./tabs/TabCartelera"
 import TabTarifas from "./tabs/TabTarifas"
-import TabReglas from "./tabs/TabReglas"
+import TabEventosEspeciales from "./tabs/TabEventosEspeciales"
+import TabVidriera from "./tabs/TabVidriera"
+
+const BUCKET_CARTELERA = 'cartelera';
+const BUCKET_EVENTOS = 'eventos';
 
 export default function ConfiguracionAdminPage() {
   const supabase = createClient()
   
-  // SOLUCIÓN: Cambiado a estado dinámico
   const [modeloNegocio, setModeloNegocio] = useState<string>("mensual") 
   const esMensual = modeloNegocio === "mensual"
 
-  const [pestañaActiva, setPestañaActiva] = useState<'institucional' | 'cartelera' | 'tarifas' | 'reglas'>('institucional')
+  const [pestañaActiva, setPestañaActiva] = useState<'institucional' | 'cartelera' | 'tarifas' | 'eventos' | 'vidriera'>('institucional')
   const [academiaId, setAcademiaId] = useState<string | null>(null)
   const [origenWeb, setOrigenWeb] = useState("")
   
   const [infoAcademia, setInfoAcademia] = useState({
-    nombre_largo: "", nombre_corto: "", siglas: "", slug: "", admin_nombre: "", logo_url: "", firma_url: "", eventos_cartelera: [] as any[]
+    nombre_largo: "", nombre_corto: "", siglas: "", slug: "", admin_nombre: "", logo_url: "", firma_url: "", eventos_cartelera: [] as any[],
+    telefono: "",
+    titulo_login: "", descripcion_login: "", imagen_login: "",
+    titulo_registro: "", descripcion_registro: "", imagen_registro: ""
   })
   
   const [cargandoInfo, setCargandoInfo] = useState(true)
@@ -35,38 +41,63 @@ export default function ConfiguracionAdminPage() {
   const [archivoEvento, setArchivoEvento] = useState<File | null>(null)
   const [publicandoEvento, setPublicandoEvento] = useState(false)
   const [borrandoEventoId, setBorrandoEventoId] = useState<string | null>(null)
-
-  const [tarifas, setTarifas] = useState<any[]>([])
-  const [reglas, setReglas] = useState({ horasCancelacion: 5, pideAptoFisico: true })
+  const [archivoEventoEspecial, setArchivoEventoEspecial] = useState<File | null>(null);
   
+  const [tarifas, setTarifas] = useState<any[]>([])
+  const [guardandoTarifa, setGuardandoTarifa] = useState(false)
   const [modalTarifa, setModalTarifa] = useState(false)
   const [tarifaEditando, setTarifaEditando] = useState<any>(null)
-  const [guardandoTarifa, setGuardandoTarifa] = useState(false)
 
-  // === LÓGICA DE DATOS ===
+  const [eventosProgramados, setEventosProgramados] = useState<any[]>([])
+  const [modalNuevoEventoEspecial, setModalNuevoEventoEspecial] = useState(false)
+  const [guardandoEventoEspecial, setGuardandoEventoEspecial] = useState(false)
+  const [datosEventoEspecial, setDatosEventoEspecial] = useState({
+    titulo: "", descripcion_evento: "", fecha: "", hora_inicio: "", precio: "", cupo_maximo: "30"
+  })
+
+  const cargarConfiguracionYEventos = async () => {
+    try {
+      const { data, error } = await supabase.from('academias').select('*').limit(1).single()
+      if (data) {
+        setAcademiaId(data.id)
+        if (data.modelo_negocio) setModeloNegocio(data.modelo_negocio)
+        
+        setInfoAcademia({
+          nombre_largo: data.nombre || "", 
+          nombre_corto: data.nombre_corto || data.nombre || "", 
+          siglas: data.siglas || "", 
+          slug: data.slug || "", 
+          admin_nombre: data.admin_nombre || "Administración", 
+          logo_url: data.logo_url || "", 
+          firma_url: data.firma_url || "", 
+          eventos_cartelera: data.eventos_cartelera || [],
+          telefono: data.telefono || "",
+          titulo_login: data.titulo_login || "",
+          descripcion_login: data.descripcion_login || "",
+          imagen_login: data.imagen_login || "",
+          titulo_registro: data.titulo_registro || "",        
+          descripcion_registro: data.descripcion_registro || "", 
+          imagen_registro: data.imagen_registro || ""
+        })
+
+        const [resTarifas, resEventos] = await Promise.all([
+          supabase.from('tarifas').select('*').eq('academia_id', data.id).order('precio', { ascending: true }),
+          supabase.from('clases_programadas').select('*').eq('es_evento', true).order('fecha', { ascending: true })
+        ])
+
+        if (resTarifas.data) setTarifas(resTarifas.data)
+        if (resEventos.data) setEventosProgramados(resEventos.data)
+      }
+    } catch (error) {
+      console.error("Error al cargar la configuración.")
+    } finally {
+      setCargandoInfo(false)
+    }
+  }
+
   useEffect(() => {
     setOrigenWeb(window.location.origin)
-    const cargarConfiguracion = async () => {
-      try {
-        const { data, error } = await supabase.from('academias').select('*').limit(1).single()
-        if (data) {
-          setAcademiaId(data.id)
-          if (data.modelo_negocio) setModeloNegocio(data.modelo_negocio) // ASIGNACIÓN DINÁMICA DE LA DB
-          
-          setInfoAcademia({
-            nombre_largo: data.nombre || "", nombre_corto: data.nombre_corto || data.nombre || "", siglas: data.siglas || "", slug: data.slug || "", 
-            admin_nombre: data.admin_nombre || "Administración", logo_url: data.logo_url || "", firma_url: data.firma_url || "", eventos_cartelera: data.eventos_cartelera || []
-          })
-          const { data: dataTarifas } = await supabase.from('tarifas').select('*').eq('academia_id', data.id).order('precio', { ascending: true })
-          if (dataTarifas) setTarifas(dataTarifas)
-        }
-      } catch (error) {
-        console.error("Error al cargar la configuración.")
-      } finally {
-        setCargandoInfo(false)
-      }
-    }
-    cargarConfiguracion()
+    cargarConfiguracionYEventos()
   }, [supabase])
 
   const handleSubirImagen = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'logo' | 'firma') => {
@@ -97,15 +128,22 @@ export default function ConfiguracionAdminPage() {
     setGuardandoTextos(true)
     try {
       const slugLimpio = infoAcademia.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+      
       const { error } = await supabase.from('academias').update({
-        nombre: infoAcademia.nombre_largo, nombre_corto: infoAcademia.nombre_corto, siglas: infoAcademia.siglas, slug: slugLimpio, admin_nombre: infoAcademia.admin_nombre,
+        nombre: infoAcademia.nombre_largo, 
+        nombre_corto: infoAcademia.nombre_corto, 
+        siglas: infoAcademia.siglas, 
+        slug: slugLimpio, 
+        admin_nombre: infoAcademia.admin_nombre,
+        telefono: infoAcademia.telefono 
       }).eq('id', academiaId)
+      
       if (error) {
         if (error.code === '23505') throw new Error("Ese Identificador de Link ya está en uso por otra academia.")
         throw error
       }
       setInfoAcademia(prev => ({...prev, slug: slugLimpio}))
-      toast.success("Textos institucionales guardados con éxito.")
+      toast.success("Configuración institucional guardada con éxito.")
     } catch (error: any) {
       toast.error(error.message || "Error al guardar textos.")
     } finally {
@@ -120,6 +158,13 @@ export default function ConfiguracionAdminPage() {
     toast.success("¡Link de registro copiado al portapapeles!")
   }
 
+  const copiarLinkLogin = () => {
+    if (!infoAcademia.slug) { toast.error("Falta identificador de link."); return }
+    const link = `${origenWeb}/login?club=${infoAcademia.slug}`
+    navigator.clipboard.writeText(link)
+    toast.success("¡Link de login copiado al portapapeles!")
+  }
+
   const handlePublicarEvento = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!academiaId || !nuevoEvento.titulo) return
@@ -127,27 +172,20 @@ export default function ConfiguracionAdminPage() {
     try {
       let imagenUrl = ""
       if (archivoEvento) {
-        const fileExt = archivoEvento.name.split('.').pop()
-        const nombreLimpio = archivoEvento.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-        const filePath = `institucional/${academiaId}/avisos/${Date.now()}-${nombreLimpio}`
-        const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, archivoEvento)
+        const filePath = `avisos/${academiaId}/${Date.now()}-${archivoEvento.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+        const { error: uploadError } = await supabase.storage.from(BUCKET_CARTELERA).upload(filePath, archivoEvento)
         if (uploadError) throw uploadError
-        const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
+        const { data } = supabase.storage.from(BUCKET_CARTELERA).getPublicUrl(filePath)
         imagenUrl = data.publicUrl
       }
       const eventoFinal = { id: `ev-${Date.now()}`, titulo: nuevoEvento.titulo, descripcion: nuevoEvento.descripcion, imagen_url: imagenUrl, fecha: new Date().toISOString() }
       const nuevaLista = [eventoFinal, ...(infoAcademia.eventos_cartelera || [])]
-      const { error: updateError } = await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
-      if (updateError) throw updateError
+      await supabase.from('academias').update({ eventos_cartelera: nuevaLista }).eq('id', academiaId)
       setInfoAcademia(prev => ({ ...prev, eventos_cartelera: nuevaLista }))
       setNuevoEvento({ titulo: "", descripcion: "" })
       setArchivoEvento(null)
-      toast.success("¡Evento publicado!")
-    } catch (error: any) {
-      toast.error("Error al publicar evento.")
-    } finally {
-      setPublicandoEvento(false)
-    }
+      toast.success("Aviso publicado.")
+    } catch (error) { toast.error("Error.") } finally { setPublicandoEvento(false) }
   }
 
   const handleBorrarEvento = (idAviso: string, urlImagen: string) => {
@@ -180,6 +218,7 @@ export default function ConfiguracionAdminPage() {
 
   const abrirModalNueva = () => { setTarifaEditando({ id: null, nombre: "", precio: "", tipo: esMensual ? "mensual" : "creditos", creditos: "" }); setModalTarifa(true) }
   const abrirModalEditar = (tarifa: any) => { setTarifaEditando({ ...tarifa }); setModalTarifa(true) }
+  
   const guardarTarifa = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!academiaId) return
@@ -215,7 +254,7 @@ export default function ConfiguracionAdminPage() {
             const { error } = await supabase.from('tarifas').delete().eq('id', tarifaEditando.id)
             if (error) throw error
             setTarifas(tarifas.filter(t => t.id !== tarifaEditando.id))
-            toast.success("Tarifa eliminado.")
+            toast.success("Tarifa eliminada.")
             setModalTarifa(false)
           } catch (error: any) {
             toast.error("Error al eliminar tarifa.")
@@ -225,6 +264,59 @@ export default function ConfiguracionAdminPage() {
         }
       },
       cancel: { label: "Cancelar", onClick: () => {} }
+    })
+  }
+
+  const handleCrearEventoEspecial = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!academiaId) return
+    setGuardandoEventoEspecial(true)
+    try {
+      let imagenUrl = "";
+      if (archivoEventoEspecial) {
+        const fileName = `${Date.now()}-${Math.random()}.png`;
+        const filePath = `eventos/${academiaId}/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from(BUCKET_EVENTOS).upload(filePath, archivoEventoEspecial);
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from(BUCKET_EVENTOS).getPublicUrl(filePath);
+        imagenUrl = data.publicUrl;
+      }
+
+      await supabase.from('clases_programadas').insert({
+        academia_id: academiaId,
+        titulo: datosEventoEspecial.titulo,
+        descripcion_evento: datosEventoEspecial.descripcion_evento,
+        fecha: datosEventoEspecial.fecha,
+        hora_inicio: datosEventoEspecial.hora_inicio + ":00",
+        precio: Number(datosEventoEspecial.precio),
+        cupo_maximo: Number(datosEventoEspecial.cupo_maximo),
+        es_evento: true,
+        costo_creditos: 0,
+        imagen_url: imagenUrl
+      })
+
+      toast.success("Evento publicado.")
+      setDatosEventoEspecial({ titulo: "", descripcion_evento: "", fecha: "", hora_inicio: "", precio: "", cupo_maximo: "30" })
+      setArchivoEventoEspecial(null)
+      cargarConfiguracionYEventos()
+    } catch (error: any) { toast.error(error.message) } finally { setGuardandoEventoEspecial(false) }
+  } 
+
+  const handleBorrarEventoEspecial = (id: string) => {
+    toast("¿Eliminar definitivamente este evento especial?", {
+      description: "Se quitará de la grilla operativa y del visor de las alumnas.",
+      action: {
+        label: "Eliminar",
+        onClick: async () => {
+          const { error } = await supabase.from('clases_programadas').delete().eq('id', id)
+          if (error) toast.error("No se pudo eliminar.")
+          else {
+            toast.success("Evento eliminado.")
+            cargarConfiguracionYEventos()
+          }
+        }
+      },
+      cancel: { label: "Cancelar", onClick: () => {} } 
     })
   }
 
@@ -238,23 +330,26 @@ export default function ConfiguracionAdminPage() {
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight italic flex items-center gap-3">
             <Settings className="h-8 w-8 text-primary" /> Configuración Global
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium">Gestión de identidad, tarifas y anuncios.</p>
+          <p className="text-muted-foreground mt-1 font-medium">Gestión de identidad, tarifas y eventos de la academia.</p>
         </div>
       </div>
 
       {/* BOTONES DE PESTAÑAS */}
       <div className="flex gap-2 border-b border-border overflow-x-auto pb-px scrollbar-hide">
-        <button onClick={() => setPestañaActiva('institucional')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'institucional' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+        <button onClick={() => setPestañaActiva('institucional')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'institucional' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary'}`}>
           <Building2 className="h-4 w-4" /> Institucional
         </button>
-        <button onClick={() => setPestañaActiva('cartelera')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'cartelera' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+        <button onClick={() => setPestañaActiva('vidriera')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'vidriera' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary'}`}>
+          <MonitorSmartphone className="h-4 w-4" /> Diseño Vidriera
+        </button>
+        <button onClick={() => setPestañaActiva('cartelera')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'cartelera' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary'}`}>
           <Megaphone className="h-4 w-4" /> Cartelera Digital
         </button>
-        <button onClick={() => setPestañaActiva('tarifas')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'tarifas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
-          <CreditCard className="h-4 w-4" /> Tarifas
+        <button onClick={() => setPestañaActiva('eventos')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'eventos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary'}`}>
+          <Sparkles className="h-4 w-4" /> Eventos Especiales
         </button>
-        <button onClick={() => setPestañaActiva('reglas')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'reglas' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
-          <AlertCircle className="h-4 w-4" /> Reglas Operativas
+        <button onClick={() => setPestañaActiva('tarifas')} className={`shrink-0 px-5 py-3 font-bold uppercase tracking-widest text-xs rounded-t-lg transition-colors flex items-center gap-2 ${pestañaActiva === 'tarifas' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary'}`}>
+          <CreditCard className="h-4 w-4" /> Tarifas
         </button>
       </div>
 
@@ -265,7 +360,7 @@ export default function ConfiguracionAdminPage() {
             infoAcademia={infoAcademia} setInfoAcademia={setInfoAcademia}
             guardandoTextos={guardandoTextos} handleGuardarTextosInstitucionales={handleGuardarTextosInstitucionales}
             subiendoLogo={subiendoLogo} subiendoFirma={subiendoFirma}
-            handleSubirImagen={handleSubirImagen} copiarLinkRegistro={copiarLinkRegistro} origenWeb={origenWeb}
+            handleSubirImagen={handleSubirImagen} copiarLinkRegistro={copiarLinkRegistro} copiarLinkLogin={copiarLinkLogin} origenWeb={origenWeb}
           />
         )}
 
@@ -278,6 +373,28 @@ export default function ConfiguracionAdminPage() {
           />
         )}
 
+        {pestañaActiva === 'eventos' && (
+          <TabEventosEspeciales 
+            eventosProgramados={eventosProgramados}
+            setModalNuevoEventoEspecial={setModalNuevoEventoEspecial}
+            handleBorrarEventoEspecial={handleBorrarEventoEspecial}
+            datosEventoEspecial={datosEventoEspecial}
+            setDatosEventoEspecial={setDatosEventoEspecial}
+            archivoEventoEspecial={archivoEventoEspecial}   
+            setArchivoEventoEspecial={setArchivoEventoEspecial} 
+            handleCrearEventoEspecial={handleCrearEventoEspecial} 
+            guardandoEventoEspecial={guardandoEventoEspecial}   
+          />
+        )}
+
+        
+        {pestañaActiva === 'vidriera' && (
+          <TabVidriera 
+            infoAcademia={infoAcademia} setInfoAcademia={setInfoAcademia} 
+            academiaId={academiaId} recargarDatos={cargarConfiguracionYEventos} 
+          />
+        )}
+
         {pestañaActiva === 'tarifas' && (
           <TabTarifas 
             tarifas={tarifas} esMensual={esMensual}
@@ -287,13 +404,56 @@ export default function ConfiguracionAdminPage() {
             guardarTarifa={guardarTarifa} borrarTarifa={borrarTarifa} guardandoTarifa={guardandoTarifa}
           />
         )}
-
-        {pestañaActiva === 'reglas' && (
-          <TabReglas 
-            esMensual={esMensual} reglas={reglas} setReglas={setReglas}
-          />
-        )}
       </div>
+
+      {/* MODAL NUEVO EVENTO OPERATIVO */}
+      {modalNuevoEventoEspecial && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-6 border-b bg-slate-50">
+              <h3 className="font-black text-xl text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" /> Crear Evento Comercial
+              </h3>
+            </div>
+            <form onSubmit={handleCrearEventoEspecial} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-500">Título del Evento / Muestra</label>
+                <input required value={datosEventoEspecial.titulo} onChange={e => setDatosEventoEspecial({...datosEventoEspecial, titulo: e.target.value})} placeholder="Muestra de fin de año 2026" className="w-full border rounded-xl h-11 px-3 outline-none focus:border-slate-900 font-medium" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-500">Descripción para Alumnas</label>
+                <textarea value={datosEventoEspecial.descripcion_evento} onChange={e => setDatosEventoEspecial({...datosEventoEspecial, descripcion_evento: e.target.value})} placeholder="Detalles de entradas, ubicación, etc..." className="w-full border rounded-xl p-3 h-20 outline-none focus:border-slate-900 font-medium resize-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-1"><Calendar className="h-3 w-3" /> Fecha</label>
+                  <input required type="date" value={datosEventoEspecial.fecha} onChange={e => setDatosEventoEspecial({...datosEventoEspecial, fecha: e.target.value})} className="w-full border rounded-xl h-11 px-3 outline-none focus:border-slate-900" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500">Hora de Inicio</label>
+                  <input required type="time" value={datosEventoEspecial.hora_inicio} onChange={e => setDatosEventoEspecial({...datosEventoEspecial, hora_inicio: e.target.value})} className="w-full border rounded-xl h-11 px-3 outline-none focus:border-slate-900" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-1"><DollarSign className="h-3 w-3" /> Precio Entrada ($)</label>
+                  <input required type="number" value={datosEventoEspecial.precio} onChange={e => setDatosEventoEspecial({...datosEventoEspecial, precio: e.target.value})} placeholder="2500" className="w-full border rounded-xl h-11 px-3 outline-none focus:border-slate-900 font-bold text-emerald-600" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-1"><Users className="h-3 w-3" /> Cupo Máximo</label>
+                  <input required type="number" value={datosEventoEspecial.cupo_maximo} onChange={e => setDatosEventoEspecial({...datosEventoEspecial, cupo_maximo: e.target.value})} className="w-full border rounded-xl h-11 px-3 outline-none focus:border-slate-900 font-bold" />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4 border-t mt-4">
+                <Button type="button" variant="ghost" onClick={() => setModalNuevoEventoEspecial(false)} className="flex-1 font-bold">Cancelar</Button>
+                <Button type="submit" disabled={guardandoEventoEspecial} className="flex-1 bg-slate-900 hover:bg-slate-800 font-bold text-white">
+                  {guardandoEventoEspecial ? <Loader2 className="h-5 w-5 animate-spin" /> : "Publicar Evento"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

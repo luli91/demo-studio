@@ -56,7 +56,7 @@ function FormularioRegistro() {
 
       const { data } = await supabase
         .from('academias')
-        .select('id, nombre, logo_url')
+        .select('id, nombre, logo_url, imagen_registro, titulo_registro, descripcion_registro')
         .eq('slug', slugClub)
         .single()
 
@@ -92,7 +92,6 @@ function FormularioRegistro() {
         fecha_nacimiento: fechaNacimiento
       }
 
-      // GUARDAMOS EN LA BÓVEDA DE AUTH
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -107,7 +106,6 @@ function FormularioRegistro() {
       if (authError) throw new Error(authError.message)
       if (!authData.user) throw new Error("No se pudo crear el usuario.")
 
-      // GUARDAMOS EN TU TABLA USUARIOS ATADO AL CLUB
       const { error: insertError } = await supabase.from('usuarios').upsert({
         id: authData.user.id,
         academia_id: academia.id, 
@@ -276,20 +274,30 @@ function FormularioRegistro() {
           <p className="text-center text-sm text-muted-foreground">
             ¿Ya tenés cuenta? <Link href={`/login?club=${slugClub || ''}`} className="font-semibold text-primary hover:underline">Iniciá sesión</Link>
           </p>
+          <div className="mt-12 border-t border-border pt-6 flex flex-col items-center justify-center space-y-1 select-none">
+            <p className="text-[9px] uppercase tracking-widest font-black text-muted-foreground/40">Powered by</p>
+            <p className="text-xs font-black tracking-tight text-foreground/60">
+              Lume Studio <span className="font-medium opacity-50">| by Cynthia Medina</span>
+            </p>
+          </div>
         </div>
       </div>
 
       <div className="hidden lg:block lg:w-1/2 relative bg-primary">
         <img 
-          src="/register.jpg" 
+          src={academia?.imagen_registro || "/register.jpg"} 
           alt="Fondo de entrenamiento" 
           className="absolute inset-0 h-full w-full object-cover opacity-50"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
         <div className="absolute inset-0 flex items-center justify-center p-12 text-white z-20">
           <div className="max-w-md">
-            <h2 className="text-4xl font-bold mb-4">Gestioná tu disciplina sin esfuerzo.</h2>
-            <p className="text-lg opacity-80">Reservas, pagos y métricas en un solo lugar. La plataforma definitiva para clubes y estudios.</p>
+            <h2 className="text-4xl font-bold mb-4">
+              {academia?.titulo_registro || "Gestioná tu disciplina sin esfuerzo."}
+            </h2>
+            <p className="text-lg opacity-80">
+              {academia?.descripcion_registro || "Reservas, pagos y métricas en un solo lugar. La plataforma definitiva para clubes y estudios."}
+            </p>
           </div>
         </div>
       </div>

@@ -69,7 +69,7 @@ export default function AdminAlumnosPage() {
     try {
       const { data: aca } = await supabase.from("academias").select("*").limit(1).single()
       if (aca) {
-        if (aca.modelo_negocio) setModeloNegocio(aca.modelo_negocio) // ACTUALIZACIÓN DINÁMICA
+        if (aca.modelo_negocio) setModeloNegocio(aca.modelo_negocio)
         setAcademiaOficial({
           nombre_largo: aca.nombre || "MI ACADEMIA",
           nombre_corto: aca.nombre_corto || aca.nombre || "MI ACADEMIA",
@@ -93,7 +93,6 @@ export default function AdminAlumnosPage() {
       const diaActual = hoy.getDate()
       const mesActual = hoy.getMonth()
       const anioActual = hoy.getFullYear()
-
       const mesPasado = mesActual === 0 ? 11 : mesActual - 1
       const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual
 
@@ -114,17 +113,28 @@ export default function AdminAlumnosPage() {
         })
         
         const tienePagoEsteMes = pagosPropios.some((p: any) => {
-          const f = new Date(p.fecha)
-          return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesActual && f.getFullYear() === anioActual
+          if (p.concepto_categoria !== 'CUOTA') return false
+          const esDelMesExacto = p.concepto_detalle?.includes(`Mes ${mesActual + 1}`)
+          if (esDelMesExacto) return true
+          if (!p.concepto_detalle?.includes("Mes")) {
+            const f = new Date(p.fecha)
+            return f.getMonth() === mesActual && f.getFullYear() === anioActual
+          }
+          return false
         })
 
         const tienePagoMesAnterior = pagosPropios.some((p: any) => {
-          const f = new Date(p.fecha)
-          return p.concepto_categoria === 'CUOTA' && f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
+          if (p.concepto_categoria !== 'CUOTA') return false
+          const esDelMesAnteriorExacto = p.concepto_detalle?.includes(`Mes ${mesPasado + 1}`)
+          if (esDelMesAnteriorExacto) return true
+          if (!p.concepto_detalle?.includes("Mes")) {
+            const f = new Date(p.fecha)
+            return f.getMonth() === mesPasado && f.getFullYear() === anioMesPasado
+          }
+          return false
         })
 
         let estadoCalculado = 'deuda'
-        
         if (pagosPropios.length === 0) {
           estadoCalculado = 'deuda'
         } else if (tienePagoEsteMes) {
@@ -183,16 +193,46 @@ export default function AdminAlumnosPage() {
 
   if (!isMounted) return null
 
+  // ---- NUEVA FUNCIÓN PARA GENERAR EL RECIBO CORRELATIVO ---- //
+  const generarNroRecibo = async () => {
+    // Buscamos todos los pagos que empiecen con '0001-'
+    const { data: pagosExistentes } = await supabase
+      .from('pagos')
+      .select('nro_recibo')
+      .ilike('nro_recibo', '0001-%')
+    
+    // Si no hay pagos, empezamos en 1
+    if (!pagosExistentes || pagosExistentes.length === 0) {
+      return `0001-00001`
+    }
+
+    // Buscamos el número más alto
+    let maxNum = 0
+    pagosExistentes.forEach(p => {
+      const parteNumerica = p.nro_recibo.split('-')[1]
+      if (parteNumerica) {
+        const num = parseInt(parteNumerica, 10)
+        if (num > maxNum) maxNum = num
+      }
+    })
+
+    // Le sumamos 1 al más alto y rellenamos con ceros
+    const siguienteNum = maxNum + 1
+    return `0001-${String(siguienteNum).padStart(5, '0')}`
+  }
+
   const handleCobrar = async (datos: any) => {
     if (datos.alumnosAPagar.length === 0) return toast.error("Seleccioná al menos un alumno.")
     
     try {
-      const nroRecibo = `0001-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`
-      let fechaPago = new Date().toISOString()
+      // Pedimos el número correlativo real
+      const nroReciboCorrelativo = await generarNroRecibo()
       
+      const fechaPago = new Date().toISOString()
+      
+      let observacionesFinales = datos.observaciones || "Abono por sistema"
       if (datos.concepto === "CUOTA" && datos.mesImputado) {
-        const hoy = new Date()
-        fechaPago = new Date(hoy.getFullYear(), Number(datos.mesImputado) - 1, 15).toISOString()
+        observacionesFinales = `Correspondiente al Mes ${datos.mesImputado} - ${observacionesFinales}`
       }
 
       const montoPorAlumno = datos.monto / datos.alumnosAPagar.length
@@ -203,9 +243,9 @@ export default function AdminAlumnosPage() {
 
         const { error: errorPago } = await supabase.from('pagos').insert({
           alumno_id: idAlumno, 
-          nro_recibo: nroRecibo,
+          nro_recibo: nroReciboCorrelativo, // USAMOS EL NÚMERO GENERADO
           concepto_categoria: datos.concepto,
-          concepto_detalle: datos.observaciones,
+          concepto_detalle: observacionesFinales,
           monto: montoPorAlumno,
           beneficiario: nombreBeneficiario,
           estado: 'aprobado',
@@ -231,7 +271,7 @@ export default function AdminAlumnosPage() {
       }
 
       setModalCobro({abierto: false, familia: []})
-      toast.success("¡Cobro guardado! Pago imputado individualmente a cada alumno.")
+      toast.success(`¡Cobro guardado! Recibo generado: ${nroReciboCorrelativo}`)
       cargarAlumnos() 
     } catch (error: any) {
       toast.error("Error al procesar el cobro: " + error.message)
